@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +8,6 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 export function LoginForm() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -32,7 +30,10 @@ export function LoginForm() {
         : error.message)
       return
     }
-    router.push('/')
+    // Full page reload ensures the auth cookie (set async by onAuthStateChange)
+    // is flushed to document.cookie before the next request hits the middleware.
+    // Using router.push() races against the cookie write and loses.
+    window.location.href = '/'
   }
 
   async function handleMagicLink(e: React.FormEvent) {
