@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-outfit), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), monospace;
+  --font-heading: var(--font-outfit), system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,7 +49,7 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  /* shadcn base */
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -64,7 +64,6 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.87 0 0);
@@ -81,10 +80,41 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Fluxo Caixa custom variables */
+  --background: #F0F4F8;
+  --surface: #FFFFFF;
+  --surface-hover: #F5F7FA;
+  --border: #E2E8F0;
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
+  --text-muted: #94A3B8;
+
+  --positive: #16A34A;
+  --positive-bg: #DCFCE7;
+  --negative: #DC2626;
+  --negative-bg: #FEE2E2;
+  --daily: #F59E0B;
+  --daily-bg: #FEF3C7;
+  --accent-color: #2563EB;
+  --accent-bg: #DBEAFE;
+  --accent-hover: #1D4ED8;
+  --card-bill: #7C3AED;
+  --card-bill-bg: #EDE9FE;
+
+  --cat-alimentacao: #F97316;
+  --cat-transporte: #6366F1;
+  --cat-moradia: #8B5CF6;
+  --cat-saude: #EC4899;
+  --cat-lazer: #14B8A6;
+  --cat-educacao: #3B82F6;
+  --cat-assinaturas: #A855F7;
+  --cat-salario: #22C55E;
+  --cat-freelance: #10B981;
+  --cat-outros: #64748B;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -115,6 +145,19 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* Fluxo Caixa dark */
+  --background: #0B1120;
+  --surface: #1E293B;
+  --surface-hover: #334155;
+  --border: #334155;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --positive-bg: #14532D;
+  --negative-bg: #7F1D1D;
+  --daily-bg: #78350F;
+  --card-bill-bg: #4C1D95;
 }
 
 @layer base {
@@ -122,7 +165,8 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--background);
+    color: var(--text-primary);
   }
   html {
     @apply font-sans;

@@ -1,65 +1,113 @@
-import Image from "next/image";
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { getCategories } from '@/app/actions/categories'
+import { getTransactionsByMonth } from '@/app/actions/transactions'
+import { getCards } from '@/app/actions/cards'
+import { HomeClient } from '@/app/HomeClient'
 
-export default function Home() {
+interface HomePageProps {
+  searchParams: Promise<{ mes?: string }>
+}
+
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const params = await searchParams
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  // Parse ?mes=YYYY-MM or default to current month
+  const now = new Date()
+  let year = now.getFullYear()
+  let month = now.getMonth() + 1
+
+  if (params.mes) {
+    const [y, m] = params.mes.split('-').map(Number)
+    if (y && m && m >= 1 && m <= 12) {
+      year = y
+      month = m
+    }
+  }
+
+  // Generate recurring + card bills for every month from today up to the selected month.
+  // This ensures the running balance for future months starts from the correct accumulated value.
+  const todayYear = now.getFullYear()
+  const todayMonth = now.getMonth() + 1
+
+  const monthsToGenerate: { y: number; m: number }[] = []
+  let gy = todayYear, gm = todayMonth
+  while (gy < year || (gy === year && gm <= month)) {
+    monthsToGenerate.push({ y: gy, m: gm })
+    gm++
+    if (gm > 12) { gm = 1; gy++ }
+  }
+
+  await Promise.allSettled(
+    monthsToGenerate.flatMap(({ y: fy, m: fm }) => [
+      supabase.rpc('generate_recurring_transactions', { p_user_id: user.id, p_year: fy, p_month: fm }),
+      supabase.rpc('generate_card_bills', { p_user_id: user.id, p_year: fy, p_month: fm }),
+    ])
+  )
+
+  // Fetch daily balance and monthly summary
+  const [dailyBalanceResult, summaryResult, categoriesResult, transactionsResult, cardsResult] =
+    await Promise.all([
+      supabase.rpc('get_daily_balance', {
+        p_user_id: user.id,
+        p_year: year,
+        p_month: month,
+      }),
+      supabase.rpc('get_monthly_summary', {
+        p_user_id: user.id,
+        p_year: year,
+        p_month: month,
+      }),
+      getCategories(),
+      getTransactionsByMonth(year, month),
+      getCards(),
+    ])
+
+  // RPC returns: day, entries_total, exits_total, daily_total, balance
+  // Map to the shape HomeClient expects
+  const dailyBalances = ((dailyBalanceResult.data ?? []) as Array<{
+    day: string
+    entries_total: number
+    exits_total: number
+    daily_total: number
+    balance: number
+  }>).map((row) => ({
+    date: row.day,
+    running_balance: Number(row.balance),
+    day_total: Number(row.daily_total),
+  }))
+
+  // RPC returns jsonb: entries_total, exits_total, daily_total, balance_end
+  const summaryRaw = summaryResult.data as {
+    entries_total: number
+    exits_total: number
+    daily_total: number
+    balance_end: number
+  } | null
+  const summary = summaryRaw ? {
+    total_entrada: Number(summaryRaw.entries_total ?? 0),
+    total_saida: Number(summaryRaw.exits_total ?? 0),
+    total_diario: Number(summaryRaw.daily_total ?? 0),
+    net_balance: Number(summaryRaw.balance_end ?? 0),
+  } : null
+
+  const categories = categoriesResult.data ?? []
+  const transactions = transactionsResult.data ?? []
+  const cards = cardsResult.data ?? []
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+    <HomeClient
+      year={year}
+      month={month}
+      dailyBalances={dailyBalances}
+      summary={summary}
+      transactions={transactions}
+      categories={categories}
+      cards={cards}
+    />
+  )
 }

@@ -7,7 +7,14 @@
       "Bash(printf 'No\\\\nNo\\\\n')",
       "Bash(echo \"EXIT: $?\")",
       "Bash(printf 'No\\\\n')",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(echo \"EXIT:$?\")",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__apply_migration",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }
