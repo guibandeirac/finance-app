@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { MoreVerticalIcon, PencilIcon, Trash2Icon } from 'lucide-react'
+import { ChevronDownIcon, MoreVerticalIcon, PencilIcon, Trash2Icon } from 'lucide-react'
+import { parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ import {
   SheetContent,
 } from '@/components/ui/sheet'
 import { TransactionForm } from '@/components/transactions/TransactionForm'
+import { CardBillBreakdown } from '@/components/cards/CardBillBreakdown'
 import { deleteTransaction, type Transaction } from '@/app/actions/transactions'
 import type { Category } from '@/app/actions/categories'
 import type { CreditCard } from '@/app/actions/cards'
@@ -52,6 +54,7 @@ interface TransactionCardProps {
 export function TransactionCard({ transaction, categories, cards, onMutate }: TransactionCardProps) {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [billExpanded, setBillExpanded] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const category = transaction.category
@@ -60,6 +63,10 @@ export function TransactionCard({ transaction, categories, cards, onMutate }: Tr
   const amountColor = TYPE_COLORS[transaction.type] ?? 'var(--text-primary)'
   const isCardBill = transaction.is_card_bill
   const isCardExpense = !isCardBill && !!transaction.credit_card_id
+
+  // Derive year/month from transaction date for card bills
+  const billYear = isCardBill ? parseISO(transaction.date + 'T12:00:00').getFullYear() : 0
+  const billMonth = isCardBill ? parseISO(transaction.date + 'T12:00:00').getMonth() + 1 : 0
 
   function handleDelete() {
     startTransition(async () => {
@@ -77,124 +84,159 @@ export function TransactionCard({ transaction, categories, cards, onMutate }: Tr
   return (
     <>
       <div
-        className={cn(
-          'flex items-center gap-3 rounded-xl border px-4 transition-colors',
-          isCardBill ? 'cursor-default' : 'cursor-pointer hover:bg-[var(--surface-hover)]',
-          'bg-[var(--surface)] border-[var(--border)]'
-        )}
-        style={{ minHeight: 56 }}
-        onClick={() => !isCardBill && setEditOpen(true)}
+        className="rounded-xl border overflow-hidden"
+        style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}
       >
-        {/* Left: color dot */}
+        {/* Main row */}
         <div
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-          style={{ backgroundColor: `${dotColor}22` }}
-        >
-          <span
-            className="h-3 w-3 rounded-full block"
-            style={{ backgroundColor: dotColor }}
-          />
-        </div>
-
-        {/* Middle: name + category */}
-        <div className="min-w-0 flex-1 py-3">
-          <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-            {displayName}
-          </p>
-          {category && (
-            <p className="mt-0.5 truncate text-xs" style={{ color: 'var(--text-muted)' }}>
-              {category.name}
-            </p>
+          className={cn(
+            'flex items-center gap-3 px-4 transition-colors',
+            isCardBill
+              ? 'cursor-pointer hover:bg-[var(--surface-hover)]'
+              : 'cursor-pointer hover:bg-[var(--surface-hover)]'
           )}
-        </div>
-
-        {/* Right: amount + badges + menu */}
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="flex flex-col items-end gap-1">
-            <span className="font-mono text-sm font-semibold" style={{ color: amountColor }}>
-              {transaction.type === 'saida' ? '−' : '+'}R$ {formatAmount(transaction.amount)}
-            </span>
-            <div className="flex gap-1">
-              {transaction.recurring_id && (
-                <Badge
-                  className="text-[10px] px-1 py-0 border-0"
-                  style={{ backgroundColor: 'var(--border)', color: 'var(--text-secondary)' }}
-                >
-                  Recorrente
-                </Badge>
-              )}
-              {isCardBill && (
-                <Badge
-                  className="text-[10px] px-1 py-0 border-0"
-                  style={{ backgroundColor: 'var(--card-bill-bg)', color: 'var(--card-bill)' }}
-                >
-                  Fatura
-                </Badge>
-              )}
-              {isCardExpense && (
-                <Badge
-                  className="text-[10px] px-1 py-0 border-0"
-                  style={{ backgroundColor: 'var(--accent-bg, #DBEAFE)', color: 'var(--accent-color)' }}
-                >
-                  Cartão
-                </Badge>
-              )}
-            </div>
+          style={{ minHeight: 56 }}
+          onClick={() => {
+            if (isCardBill) {
+              setBillExpanded((v) => !v)
+            } else {
+              setEditOpen(true)
+            }
+          }}
+        >
+          {/* Left: color dot */}
+          <div
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: `${dotColor}22` }}
+          >
+            <span
+              className="h-3 w-3 rounded-full block"
+              style={{ backgroundColor: dotColor }}
+            />
           </div>
 
-          {/* Dropdown menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" size="icon-sm" aria-label="Opções" />
-              }
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            >
-              <MoreVerticalIcon className="h-4 w-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}
-            >
-              {!isCardBill && (
-                <DropdownMenuItem
-                  onClick={(e) => { e.stopPropagation(); setEditOpen(true) }}
-                  style={{ color: 'var(--text-primary)' }}
+          {/* Middle: name + category */}
+          <div className="min-w-0 flex-1 py-3">
+            <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+              {displayName}
+            </p>
+            {category && (
+              <p className="mt-0.5 truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                {category.name}
+              </p>
+            )}
+          </div>
+
+          {/* Right: amount + badges + menu */}
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-col items-end gap-1">
+              <span className="font-mono text-sm font-semibold" style={{ color: amountColor }}>
+                {transaction.type === 'saida' ? '−' : '+'}R$ {formatAmount(transaction.amount)}
+              </span>
+              <div className="flex gap-1">
+                {transaction.recurring_id && (
+                  <Badge
+                    className="text-[10px] px-1 py-0 border-0"
+                    style={{ backgroundColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                  >
+                    Recorrente
+                  </Badge>
+                )}
+                {isCardBill && (
+                  <Badge
+                    className="text-[10px] px-1 py-0 border-0"
+                    style={{ backgroundColor: 'var(--card-bill-bg)', color: 'var(--card-bill)' }}
+                  >
+                    Fatura
+                  </Badge>
+                )}
+                {isCardExpense && (
+                  <Badge
+                    className="text-[10px] px-1 py-0 border-0"
+                    style={{ backgroundColor: 'var(--accent-bg, #DBEAFE)', color: 'var(--accent-color)' }}
+                  >
+                    Cartão
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Chevron for card bills / dropdown for others */}
+            {isCardBill ? (
+              <ChevronDownIcon
+                className={cn('h-4 w-4 transition-transform', billExpanded && 'rotate-180')}
+                style={{ color: 'var(--text-muted)' }}
+              />
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" size="icon-sm" aria-label="Opções" />
+                  }
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
                 >
-                  <PencilIcon className="mr-2 h-4 w-4" />
-                  Editar
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onClick={(e) => { e.stopPropagation(); setDeleteOpen(true) }}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2Icon className="mr-2 h-4 w-4" />
-                Excluir
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <MoreVerticalIcon className="h-4 w-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}
+                >
+                  <DropdownMenuItem
+                    onClick={(e) => { e.stopPropagation(); setEditOpen(true) }}
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    <PencilIcon className="mr-2 h-4 w-4" />
+                    Editar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => { e.stopPropagation(); setDeleteOpen(true) }}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2Icon className="mr-2 h-4 w-4" />
+                    Excluir
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
+
+        {/* Card bill breakdown panel */}
+        {isCardBill && billExpanded && transaction.credit_card_id && (
+          <div
+            className="border-t px-4 py-3"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <CardBillBreakdown
+              creditCardId={transaction.credit_card_id}
+              year={billYear}
+              month={billMonth}
+              categories={categories}
+              onMutate={onMutate}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Edit Sheet */}
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent
-          side="bottom"
-          className="h-[90dvh] rounded-t-2xl p-0 sm:h-full sm:max-w-md sm:rounded-none"
-          style={{ backgroundColor: 'var(--surface)' }}
-        >
-          <TransactionForm
-            transaction={transaction}
-            categories={categories}
-            cards={cards}
-            onSuccess={() => {
-              setEditOpen(false)
-              onMutate?.()
-            }}
-          />
-        </SheetContent>
-      </Sheet>
+      {/* Edit Sheet (non-bill transactions) */}
+      {!isCardBill && (
+        <Sheet open={editOpen} onOpenChange={setEditOpen}>
+          <SheetContent
+            side="bottom"
+            className="h-[90dvh] rounded-t-2xl p-0 sm:h-full sm:max-w-md sm:rounded-none"
+            style={{ backgroundColor: 'var(--surface)' }}
+          >
+            <TransactionForm
+              transaction={transaction}
+              categories={categories}
+              onSuccess={() => {
+                setEditOpen(false)
+                onMutate?.()
+              }}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* Delete confirm dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

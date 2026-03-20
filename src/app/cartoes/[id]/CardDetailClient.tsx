@@ -11,8 +11,16 @@ import {
   PlusIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +29,15 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CardItemDialog } from '@/components/cards/CardItemDialog'
-import { deleteCardItem, toggleCardItem, type CreditCard, type CardItemType, type VariableExpense } from '@/app/actions/cards'
+import {
+  deleteCardItem,
+  toggleCardItem,
+  createVariableCardItem,
+  deleteVariableCardItem,
+  type CreditCard,
+  type CardItemType,
+  type VariableExpense,
+} from '@/app/actions/cards'
 import type { Category } from '@/app/actions/categories'
 
 interface CardDetailClientProps {
@@ -30,9 +46,29 @@ interface CardDetailClientProps {
   categories: Category[]
   monthlyTotal: number
   variableExpenses: VariableExpense[]
+  year: number
+  month: number
 }
 
-export function CardDetailClient({ card, items, categories, monthlyTotal, variableExpenses }: CardDetailClientProps) {
+function formatAmountDisplay(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return ''
+  return (parseInt(digits, 10) / 100).toFixed(2).replace('.', ',')
+}
+
+function parseAmount(display: string): number {
+  return parseFloat(display.replace(/\./g, '').replace(',', '.')) || 0
+}
+
+export function CardDetailClient({
+  card,
+  items,
+  categories,
+  monthlyTotal,
+  variableExpenses,
+  year,
+  month,
+}: CardDetailClientProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [confirmItem, setConfirmItem] = useState<CardItemType | null>(null)
@@ -72,6 +108,16 @@ export function CardDetailClient({ card, items, categories, monthlyTotal, variab
   function getCategoryById(id: string | null) {
     if (!id) return null
     return categories.find((c) => c.id === id) ?? null
+  }
+
+  /** Compute current/total installment numbers for a given viewed month */
+  function computeInstallment(item: CardItemType) {
+    if (!item.start_month || !item.end_month) return null
+    const [sy, sm] = item.start_month.split('-').map(Number)
+    const [ey, em] = item.end_month.split('-').map(Number)
+    const current = (year - sy) * 12 + (month - sm) + 1
+    const total = (ey - sy) * 12 + (em - sm) + 1
+    return { current, total }
   }
 
   return (
@@ -132,6 +178,7 @@ export function CardDetailClient({ card, items, categories, monthlyTotal, variab
         onToggle={handleToggle}
         onDelete={handleDeleteRequest}
         getCategoryById={getCategoryById}
+        computeInstallment={computeInstallment}
         onSuccess={() => router.refresh()}
       />
 
@@ -148,80 +195,21 @@ export function CardDetailClient({ card, items, categories, monthlyTotal, variab
         onToggle={handleToggle}
         onDelete={handleDeleteRequest}
         getCategoryById={getCategoryById}
+        computeInstallment={computeInstallment}
         onSuccess={() => router.refresh()}
       />
 
-      {/* Variable expenses this billing cycle */}
-      {variableExpenses.length > 0 && (
-        <>
-          <div className="my-6" />
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                Gastos do mês
-                <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
-                  ({variableExpenses.length})
-                </span>
-              </h2>
-            </div>
-            <div
-              className="rounded-xl border overflow-hidden"
-              style={{ borderColor: 'var(--border)' }}
-            >
-              {variableExpenses.map((expense, idx) => {
-                const cat = expense.category as { name: string; color: string | null } | null
-                return (
-                  <div key={expense.id}>
-                    {idx > 0 && (
-                      <Separator style={{ backgroundColor: 'var(--border)' }} />
-                    )}
-                    <div
-                      className="flex items-center gap-3 px-4 py-3"
-                      style={{ backgroundColor: 'var(--surface)' }}
-                    >
-                      {/* Category dot */}
-                      <div
-                        className="h-8 w-8 shrink-0 rounded-full flex items-center justify-center"
-                        style={{ backgroundColor: cat?.color ? `${cat.color}22` : 'var(--border)' }}
-                      >
-                        <span
-                          className="h-3 w-3 rounded-full block"
-                          style={{ backgroundColor: cat?.color ?? '#94A3B8' }}
-                        />
-                      </div>
+      <div className="my-6" />
 
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-                          {expense.description ?? 'Sem descrição'}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {cat && (
-                            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                              {cat.name}
-                            </span>
-                          )}
-                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                            {new Date(expense.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Amount */}
-                      <span
-                        className="font-mono text-sm font-medium shrink-0"
-                        style={{ color: 'var(--negative)' }}
-                      >
-                        {Number(expense.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </>
-      )}
+      {/* Variable expenses section */}
+      <VariableSection
+        cardId={card.id}
+        categories={categories}
+        expenses={variableExpenses}
+        year={year}
+        month={month}
+        onMutate={() => router.refresh()}
+      />
 
       <ConfirmDialog
         open={confirmItem !== null}
@@ -246,6 +234,7 @@ interface SectionProps {
   onToggle: (item: CardItemType, checked: boolean) => void
   onDelete: (item: CardItemType) => void
   getCategoryById: (id: string | null) => Category | null
+  computeInstallment: (item: CardItemType) => { current: number; total: number } | null
   onSuccess: () => void
 }
 
@@ -259,20 +248,17 @@ function Section({
   onToggle,
   onDelete,
   getCategoryById,
+  computeInstallment,
   onSuccess,
 }: SectionProps) {
   const addLabel = itemType === 'fixed' ? 'Adicionar fixo' : 'Adicionar parcela'
 
   return (
     <div>
-      {/* Section header */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
           {title}
-          <span
-            className="ml-2 text-xs font-normal"
-            style={{ color: 'var(--text-muted)' }}
-          >
+          <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
             ({items.length})
           </span>
         </h2>
@@ -295,55 +281,39 @@ function Section({
         />
       </div>
 
-      <div
-        className="rounded-xl border overflow-hidden"
-        style={{ borderColor: 'var(--border)' }}
-      >
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
         {items.length === 0 ? (
-          <p
-            className="px-4 py-6 text-sm text-center"
-            style={{ color: 'var(--text-muted)' }}
-          >
+          <p className="px-4 py-6 text-sm text-center" style={{ color: 'var(--text-muted)' }}>
             {emptyMessage}
           </p>
         ) : (
           items.map((item, idx) => {
             const category = getCategoryById(item.category_id)
+            const inst = computeInstallment(item)
             return (
               <div key={item.id}>
-                {idx > 0 && (
-                  <Separator style={{ backgroundColor: 'var(--border)' }} />
-                )}
+                {idx > 0 && <Separator style={{ backgroundColor: 'var(--border)' }} />}
                 <div
                   className="flex items-center gap-3 px-4 py-3 transition-colors"
                   style={{ backgroundColor: item.is_active ? 'var(--surface)' : 'var(--surface-hover)' }}
                 >
-                  {/* Toggle */}
                   <Switch
                     checked={item.is_active}
                     onCheckedChange={(checked) => onToggle(item, checked)}
                     aria-label={`${item.is_active ? 'Desativar' : 'Ativar'} ${item.description}`}
                   />
 
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <p
                       className="text-sm font-medium truncate"
-                      style={{
-                        color: item.is_active ? 'var(--text-primary)' : 'var(--text-muted)',
-                      }}
+                      style={{ color: item.is_active ? 'var(--text-primary)' : 'var(--text-muted)' }}
                     >
                       {item.description}
-                      {item.item_type === 'installment' &&
-                        item.current_installment != null &&
-                        item.total_installments != null && (
-                          <span
-                            className="ml-1.5 text-xs"
-                            style={{ color: 'var(--text-muted)' }}
-                          >
-                            parcela {item.current_installment}/{item.total_installments}
-                          </span>
-                        )}
+                      {item.item_type === 'installment' && inst && (
+                        <span className="ml-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                          parcela {inst.current}/{inst.total}
+                        </span>
+                      )}
                     </p>
                     {category && (
                       <div className="flex items-center gap-1 mt-0.5">
@@ -352,17 +322,13 @@ function Section({
                           style={{ backgroundColor: category.color ?? '#94A3B8' }}
                           aria-hidden="true"
                         />
-                        <span
-                          className="text-xs truncate"
-                          style={{ color: 'var(--text-muted)' }}
-                        >
+                        <span className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
                           {category.name}
                         </span>
                       </div>
                     )}
                   </div>
 
-                  {/* Amount */}
                   <span
                     className="font-mono text-sm font-medium shrink-0"
                     style={{ color: item.is_active ? 'var(--text-primary)' : 'var(--text-muted)' }}
@@ -370,7 +336,6 @@ function Section({
                     {Number(item.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
 
-                  {/* Actions dropdown */}
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       render={
@@ -383,7 +348,7 @@ function Section({
                       <CardItemDialog
                         cardId={cardId}
                         item={item}
-                        itemType={item.item_type}
+                        itemType={item.item_type as 'fixed' | 'installment'}
                         categories={categories}
                         trigger={
                           <DropdownMenuItem
@@ -411,6 +376,218 @@ function Section({
           })
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Variable expenses section ─────────────────────────────────────────────────
+
+interface VariableSectionProps {
+  cardId: string
+  categories: Category[]
+  expenses: VariableExpense[]
+  year: number
+  month: number
+  onMutate: () => void
+}
+
+function VariableSection({ cardId, categories, expenses, year, month, onMutate }: VariableSectionProps) {
+  const [showForm, setShowForm] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const [desc, setDesc] = useState('')
+  const [amountDisplay, setAmountDisplay] = useState('')
+  const [catId, setCatId] = useState<string>('')
+
+  const expenseCategories = categories.filter((c) => c.type === 'saida' || c.type === 'all')
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!desc.trim()) { toast.error('Descrição obrigatória.'); return }
+    const amount = parseAmount(amountDisplay)
+    if (!amount || amount <= 0) { toast.error('Valor inválido.'); return }
+
+    const referenceMonth = `${year}-${String(month).padStart(2, '0')}-01`
+
+    startTransition(async () => {
+      const result = await createVariableCardItem({
+        card_id: cardId,
+        description: desc.trim(),
+        amount,
+        category_id: catId || null,
+        reference_month: referenceMonth,
+      })
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success('Gasto adicionado!')
+        setDesc('')
+        setAmountDisplay('')
+        setCatId('')
+        setShowForm(false)
+        onMutate()
+      }
+    })
+  }
+
+  function handleDelete(id: string) {
+    startTransition(async () => {
+      const result = await deleteVariableCardItem(id)
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success('Gasto removido.')
+        onMutate()
+      }
+    })
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+          Variáveis
+          <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+            ({expenses.length})
+          </span>
+        </h2>
+      </div>
+
+      {expenses.length > 0 && (
+        <div className="rounded-xl border overflow-hidden mb-3" style={{ borderColor: 'var(--border)' }}>
+          {expenses.map((expense, idx) => {
+            const cat = expense.category as { name: string; color: string | null } | null
+            return (
+              <div key={expense.id}>
+                {idx > 0 && <Separator style={{ backgroundColor: 'var(--border)' }} />}
+                <div
+                  className="flex items-center gap-3 px-4 py-3"
+                  style={{ backgroundColor: 'var(--surface)' }}
+                >
+                  <div
+                    className="h-8 w-8 shrink-0 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: cat?.color ? `${cat.color}22` : 'var(--border)' }}
+                  >
+                    <span
+                      className="h-3 w-3 rounded-full block"
+                      style={{ backgroundColor: cat?.color ?? '#94A3B8' }}
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                      {expense.description ?? 'Sem descrição'}
+                    </p>
+                    {cat && (
+                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {cat.name}
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="font-mono text-sm font-medium shrink-0" style={{ color: 'var(--negative)' }}>
+                    {Number(expense.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(expense.id)}
+                    disabled={isPending}
+                    className="rounded p-1 hover:bg-[var(--surface-hover)] disabled:opacity-40"
+                    aria-label="Remover gasto"
+                  >
+                    <Trash2Icon className="size-4" style={{ color: 'var(--text-muted)' }} />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {showForm ? (
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col gap-3 rounded-xl border p-4"
+          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
+        >
+          <Input
+            placeholder="Descrição"
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            disabled={isPending}
+            autoFocus
+          />
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <span
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                R$
+              </span>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="0,00"
+                value={amountDisplay}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, '')
+                  setAmountDisplay(raw ? formatAmountDisplay(raw) : '')
+                }}
+                disabled={isPending}
+                className="pl-9 font-mono"
+              />
+            </div>
+            <Select
+              value={catId}
+              onValueChange={(v) => setCatId(v === '__none__' ? '' : (v ?? ''))}
+            >
+              <SelectTrigger className="flex-1" size="default">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Sem categoria</SelectItem>
+                {expenseCategories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setShowForm(false)}
+              disabled={isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              className="flex-1"
+              disabled={isPending}
+              style={{ backgroundColor: 'var(--accent-color)', color: '#fff' }}
+            >
+              {isPending ? 'Salvando...' : 'Adicionar'}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--surface-hover)]"
+          style={{ color: 'var(--accent-color)' }}
+        >
+          <PlusIcon className="size-4" />
+          Adicionar gasto variável
+        </button>
+      )}
     </div>
   )
 }

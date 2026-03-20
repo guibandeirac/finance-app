@@ -33,12 +33,9 @@ import {
   type TransactionType,
 } from '@/app/actions/transactions'
 import type { Category } from '@/app/actions/categories'
-import type { CreditCard } from '@/app/actions/cards'
-
 interface TransactionFormProps {
   transaction?: Transaction
   categories: Category[]
-  cards?: CreditCard[]
   onSuccess?: () => void
 }
 
@@ -54,7 +51,7 @@ function parseAmount(display: string): number {
   return parseFloat(display.replace(/\./g, '').replace(',', '.')) || 0
 }
 
-export function TransactionForm({ transaction, categories, cards, onSuccess }: TransactionFormProps) {
+export function TransactionForm({ transaction, categories, onSuccess }: TransactionFormProps) {
   const isEditing = !!transaction
   const [isPending, startTransition] = useTransition()
 
@@ -70,9 +67,6 @@ export function TransactionForm({ transaction, categories, cards, onSuccess }: T
   const [type, setType] = useState<TransactionType>(transaction?.type ?? 'saida')
   const [categoryId, setCategoryId] = useState<string | null>(transaction?.category_id ?? null)
   const [description, setDescription] = useState<string>(transaction?.description ?? '')
-  const [cardId, setCardId] = useState<string | null>(
-    transaction?.credit_card_id ?? null
-  )
 
   const filteredCategories = categories.filter(
     (cat) => cat.type === type || cat.type === 'all'
@@ -85,13 +79,10 @@ export function TransactionForm({ transaction, categories, cards, onSuccess }: T
 
   function handleTypeChange(newType: TransactionType) {
     setType(newType)
-    // Reset category if it doesn't match the new type
     const currentCat = categories.find((c) => c.id === categoryId)
     if (currentCat && currentCat.type !== newType && currentCat.type !== 'all') {
       setCategoryId('')
     }
-    // Card payments only apply to saida/diario
-    if (newType === 'entrada') setCardId(null)
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -112,7 +103,7 @@ export function TransactionForm({ transaction, categories, cards, onSuccess }: T
         type,
         category_id: categoryId ?? null,
         description: description.trim() || null,
-        credit_card_id: cardId ?? null,
+        credit_card_id: null,
       }
 
       const result = isEditing
@@ -285,36 +276,6 @@ export function TransactionForm({ transaction, categories, cards, onSuccess }: T
           />
         </div>
 
-        {/* Card selector — only shown for saida/diario when cards are available */}
-        {cards && cards.length > 0 && (type === 'saida' || type === 'diario') && (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-              Pago com <span style={{ color: 'var(--text-muted)' }}>(opcional)</span>
-            </label>
-            <Select
-              value={cardId ?? ''}
-              onValueChange={(v) => setCardId(v || null)}
-            >
-              <SelectTrigger className="w-full" style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}>
-                <SelectValue placeholder="Débito / dinheiro" />
-              </SelectTrigger>
-              <SelectContent style={{ backgroundColor: 'var(--surface)' }}>
-                <SelectItem value="">Débito / dinheiro</SelectItem>
-                {cards.map((card) => (
-                  <SelectItem key={card.id} value={card.id}>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: card.color }}
-                      />
-                      {card.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
       </div>
 
       <SheetFooter className="px-4 pb-4 pt-2">

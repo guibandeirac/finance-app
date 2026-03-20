@@ -2,6 +2,21 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// ─── Internal helper ──────────────────────────────────────────────────────────
+
+async function recalcBills(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+  card_id: string,
+  user_id: string
+) {
+  await supabase.rpc('recalculate_card_bills', {
+    p_card_id: card_id,
+    p_user_id: user_id,
+  })
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,12 +36,16 @@ export interface CardItemType {
   id: string
   card_id: string
   user_id: string
-  item_type: 'fixed' | 'installment'
+  item_type: 'fixed' | 'installment' | 'variable'
   description: string
   category_id: string | null
   amount: number
-  total_installments: number | null
-  current_installment: number | null
+  // installment fields
+  start_month: string | null   // YYYY-MM-DD (first of month)
+  end_month: string | null     // YYYY-MM-DD (first of month)
+  // variable fields
+  reference_month: string | null  // YYYY-MM-DD (first of month)
+  // legacy (kept for fixed items)
   start_date: string
   end_date: string | null
   is_active: boolean
@@ -42,22 +61,47 @@ export interface CardData {
 
 export interface VariableExpense {
   id: string
-  date: string
   amount: number
   description: string | null
   category_id: string | null
   category?: { name: string; color: string | null } | null
 }
 
+export interface BillBreakdownItem {
+  id: string
+  description: string
+  amount: number
+  category_id: string | null
+  item_type: 'fixed' | 'installment' | 'variable'
+  current_inst: number | null
+  total_inst: number | null
+  reference_month: string | null
+  is_active: boolean
+}
+
+export interface BillBreakdown {
+  fixed: BillBreakdownItem[]
+  installments: BillBreakdownItem[]
+  variable: BillBreakdownItem[]
+  totals: {
+    fixed: number
+    installments: number
+    variable: number
+    total: number
+  }
+}
+
 export interface CardItemData {
   card_id: string
-  item_type: 'fixed' | 'installment'
+  item_type: 'fixed' | 'installment' | 'variable'
   description: string
   amount: number
   category_id?: string | null
-  total_installments?: number | null
-  current_installment?: number | null
-  start_date?: string
+  // installment
+  start_month?: string | null
+  end_month?: string | null
+  // variable
+  reference_month?: string | null
 }
 
 // ─── Cards ────────────────────────────────────────────────────────────────────
@@ -166,6 +210,7 @@ export async function getCardItems(
     .select('*')
     .eq('card_id', card_id)
     .eq('user_id', user.id)
+    .in('item_type', ['fixed', 'installment'])
     .order('item_type', { ascending: true })
     .order('description', { ascending: true })
 
@@ -181,8 +226,6 @@ export async function createCardItem(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { data: null, error: 'Usuário não autenticado' }
 
-  const today = new Date().toISOString().split('T')[0]
-
   const { data, error } = await supabase
     .from('credit_card_items')
     .insert({
@@ -192,9 +235,9 @@ export async function createCardItem(
       description: itemData.description,
       amount: itemData.amount,
       category_id: itemData.category_id ?? null,
-      total_installments: itemData.total_installments ?? null,
-      current_installment: itemData.current_installment ?? null,
-      start_date: itemData.start_date ?? today,
+      start_month: itemData.start_month ?? null,
+      end_month: itemData.end_month ?? null,
+      reference_month: itemData.reference_month ?? null,
       is_active: true,
     })
     .select()
@@ -202,6 +245,8 @@ export async function createCardItem(
 
   if (error) return { data: null, error: error.message }
 
+  await recalcBills(supabase, itemData.card_id, user.id)
+  revalidatePath('/')
   revalidatePath('/cartoes')
   return { data, error: null }
 }
@@ -221,8 +266,8 @@ export async function updateCardItem(
       ...(itemData.description !== undefined && { description: itemData.description }),
       ...(itemData.amount !== undefined && { amount: itemData.amount }),
       ...(itemData.category_id !== undefined && { category_id: itemData.category_id }),
-      ...(itemData.total_installments !== undefined && { total_installments: itemData.total_installments }),
-      ...(itemData.current_installment !== undefined && { current_installment: itemData.current_installment }),
+      ...(itemData.start_month !== undefined && { start_month: itemData.start_month }),
+      ...(itemData.end_month !== undefined && { end_month: itemData.end_month }),
     })
     .eq('id', id)
     .eq('user_id', user.id)
@@ -231,6 +276,8 @@ export async function updateCardItem(
 
   if (error) return { data: null, error: error.message }
 
+  if (data?.card_id) await recalcBills(supabase, data.card_id, user.id)
+  revalidatePath('/')
   revalidatePath('/cartoes')
   return { data, error: null }
 }
@@ -241,6 +288,14 @@ export async function deleteCardItem(id: string): Promise<{ error: string | null
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Usuário não autenticado' }
 
+  // Fetch card_id before deleting
+  const { data: item } = await supabase
+    .from('credit_card_items')
+    .select('card_id')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single()
+
   const { error } = await supabase
     .from('credit_card_items')
     .delete()
@@ -249,6 +304,8 @@ export async function deleteCardItem(id: string): Promise<{ error: string | null
 
   if (error) return { error: error.message }
 
+  if (item?.card_id) await recalcBills(supabase, item.card_id, user.id)
+  revalidatePath('/')
   revalidatePath('/cartoes')
   return { error: null }
 }
@@ -262,17 +319,136 @@ export async function toggleCardItem(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Usuário não autenticado' }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('credit_card_items')
     .update({ is_active })
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .select('card_id')
+    .single()
+
+  if (error) return { error: error.message }
+
+  if (data?.card_id) await recalcBills(supabase, data.card_id, user.id)
+  revalidatePath('/')
+  revalidatePath('/cartoes')
+  return { error: null }
+}
+
+// ─── Variable Card Items ───────────────────────────────────────────────────────
+
+export async function createVariableCardItem(data: {
+  card_id: string
+  description: string
+  amount: number
+  category_id?: string | null
+  reference_month: string   // YYYY-MM-DD
+}): Promise<{ data: CardItemType | null; error: string | null }> {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: 'Usuário não autenticado' }
+
+  const { data: item, error } = await supabase
+    .from('credit_card_items')
+    .insert({
+      user_id: user.id,
+      card_id: data.card_id,
+      item_type: 'variable',
+      description: data.description,
+      amount: data.amount,
+      category_id: data.category_id ?? null,
+      reference_month: data.reference_month,
+      is_active: true,
+    })
+    .select()
+    .single()
+
+  if (error) return { data: null, error: error.message }
+
+  // Recalculate all existing bills for this card (authoritative DB calculation)
+  await recalcBills(supabase, data.card_id, user.id)
+  revalidatePath('/')
+  revalidatePath('/cartoes')
+  return { data: item, error: null }
+}
+
+export async function deleteVariableCardItem(id: string): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Usuário não autenticado' }
+
+  const { data: item } = await supabase
+    .from('credit_card_items')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!item) return { error: 'Item não encontrado' }
+
+  const { error } = await supabase
+    .from('credit_card_items')
+    .delete()
     .eq('id', id)
     .eq('user_id', user.id)
 
   if (error) return { error: error.message }
 
+  // Recalculate all existing bills for this card (authoritative DB calculation)
+  await recalcBills(supabase, item.card_id, user.id)
+  revalidatePath('/')
   revalidatePath('/cartoes')
   return { error: null }
 }
+
+// ─── Bill Breakdown ────────────────────────────────────────────────────────────
+
+export async function getCardBillBreakdown(
+  card_id: string,
+  year: number,
+  month: number
+): Promise<{ data: BillBreakdown | null; error: string | null }> {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: 'Usuário não autenticado' }
+
+  const { data, error } = await supabase.rpc('get_card_bill_breakdown', {
+    p_card_id: card_id,
+    p_year: year,
+    p_month: month,
+  })
+
+  if (error) return { data: null, error: error.message }
+
+  const rows = (data ?? []) as BillBreakdownItem[]
+  const fixed = rows.filter((r) => r.item_type === 'fixed')
+  const installments = rows.filter((r) => r.item_type === 'installment')
+  const variable = rows.filter((r) => r.item_type === 'variable')
+
+  const sumFixed = fixed.reduce((s, r) => s + Number(r.amount), 0)
+  const sumInstallments = installments.reduce((s, r) => s + Number(r.amount), 0)
+  const sumVariable = variable.reduce((s, r) => s + Number(r.amount), 0)
+
+  return {
+    data: {
+      fixed,
+      installments,
+      variable,
+      totals: {
+        fixed: sumFixed,
+        installments: sumInstallments,
+        variable: sumVariable,
+        total: sumFixed + sumInstallments + sumVariable,
+      },
+    },
+    error: null,
+  }
+}
+
+// ─── Monthly total & variable expenses ────────────────────────────────────────
 
 export async function getCardMonthlyTotal(
   card_id: string,
@@ -284,64 +460,44 @@ export async function getCardMonthlyTotal(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { data: null, error: 'Usuário não autenticado' }
 
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-  const endDate = new Date(year, month, 0)
-  const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+  const billMonth = `${year}-${String(month).padStart(2, '0')}-01`
 
-  // Sum fixed items + installments
-  const { data: items, error: itemsError } = await supabase
-    .from('credit_card_items')
-    .select('amount')
-    .eq('card_id', card_id)
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .lte('start_date', endDateStr)
-    .or(`end_date.is.null,end_date.gte.${startDate}`)
+  const [fixedRes, installRes, varRes] = await Promise.all([
+    supabase
+      .from('credit_card_items')
+      .select('amount')
+      .eq('card_id', card_id)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .eq('item_type', 'fixed'),
+    supabase
+      .from('credit_card_items')
+      .select('amount')
+      .eq('card_id', card_id)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .eq('item_type', 'installment')
+      .lte('start_month', billMonth)
+      .gte('end_month', billMonth),
+    supabase
+      .from('credit_card_items')
+      .select('amount')
+      .eq('card_id', card_id)
+      .eq('user_id', user.id)
+      .eq('item_type', 'variable')
+      .eq('reference_month', billMonth),
+  ])
 
-  if (itemsError) return { data: null, error: itemsError.message }
+  if (fixedRes.error) return { data: null, error: fixedRes.error.message }
+  if (installRes.error) return { data: null, error: installRes.error.message }
+  if (varRes.error) return { data: null, error: varRes.error.message }
 
-  // Fetch card to get closing_day for billing cycle
-  const { data: card } = await supabase
-    .from('credit_cards')
-    .select('closing_day')
-    .eq('id', card_id)
-    .single()
+  const total =
+    (fixedRes.data ?? []).reduce((s, i) => s + Number(i.amount), 0) +
+    (installRes.data ?? []).reduce((s, i) => s + Number(i.amount), 0) +
+    (varRes.data ?? []).reduce((s, i) => s + Number(i.amount), 0)
 
-  // Compute billing cycle for variable expenses
-  let cycleStart: string
-  let cycleEnd: string
-
-  if (card?.closing_day) {
-    const cd = card.closing_day
-    cycleEnd = `${year}-${String(month).padStart(2, '0')}-${String(cd).padStart(2, '0')}`
-    if (month === 1) {
-      cycleStart = `${year - 1}-12-${String(cd + 1).padStart(2, '0')}`
-    } else {
-      cycleStart = `${year}-${String(month - 1).padStart(2, '0')}-${String(cd + 1).padStart(2, '0')}`
-    }
-  } else {
-    if (month === 1) {
-      cycleStart = `${year - 1}-12-01`
-      cycleEnd = `${year - 1}-12-31`
-    } else {
-      cycleStart = `${year}-${String(month - 1).padStart(2, '0')}-01`
-      const prevEnd = new Date(year, month - 1, 0)
-      cycleEnd = `${year}-${String(month - 1).padStart(2, '0')}-${String(prevEnd.getDate()).padStart(2, '0')}`
-    }
-  }
-
-  const { data: varExpenses } = await supabase
-    .from('transactions')
-    .select('amount')
-    .eq('user_id', user.id)
-    .eq('credit_card_id', card_id)
-    .eq('is_card_bill', false)
-    .gte('date', cycleStart)
-    .lte('date', cycleEnd)
-
-  const itemsTotal = (items ?? []).reduce((sum, item) => sum + Number(item.amount), 0)
-  const varTotal = (varExpenses ?? []).reduce((sum, tx) => sum + Number(tx.amount), 0)
-  return { data: itemsTotal + varTotal, error: null }
+  return { data: total, error: null }
 }
 
 export async function getCardVariableExpenses(
@@ -354,61 +510,32 @@ export async function getCardVariableExpenses(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { data: null, error: 'Usuário não autenticado' }
 
-  // Fetch card to get closing_day
-  const { data: card } = await supabase
-    .from('credit_cards')
-    .select('closing_day')
-    .eq('id', card_id)
-    .single()
-
-  let cycleStart: string
-  let cycleEnd: string
-
-  if (card?.closing_day) {
-    const cd = card.closing_day
-    cycleEnd = `${year}-${String(month).padStart(2, '0')}-${String(cd).padStart(2, '0')}`
-    if (month === 1) {
-      cycleStart = `${year - 1}-12-${String(cd + 1).padStart(2, '0')}`
-    } else {
-      cycleStart = `${year}-${String(month - 1).padStart(2, '0')}-${String(cd + 1).padStart(2, '0')}`
-    }
-  } else {
-    if (month === 1) {
-      cycleStart = `${year - 1}-12-01`
-      cycleEnd = `${year - 1}-12-31`
-    } else {
-      cycleStart = `${year}-${String(month - 1).padStart(2, '0')}-01`
-      const prevEnd = new Date(year, month - 1, 0)
-      cycleEnd = `${year}-${String(month - 1).padStart(2, '0')}-${String(prevEnd.getDate()).padStart(2, '0')}`
-    }
-  }
+  const referenceMonth = `${year}-${String(month).padStart(2, '0')}-01`
 
   const { data, error } = await supabase
-    .from('transactions')
-    .select('id, date, amount, description, category_id, category:categories(name, color)')
+    .from('credit_card_items')
+    .select('id, amount, description, category_id, category:categories(name, color)')
+    .eq('card_id', card_id)
     .eq('user_id', user.id)
-    .eq('credit_card_id', card_id)
-    .eq('is_card_bill', false)
-    .gte('date', cycleStart)
-    .lte('date', cycleEnd)
-    .order('date', { ascending: true })
+    .eq('item_type', 'variable')
+    .eq('reference_month', referenceMonth)
+    .order('created_at', { ascending: true })
 
   if (error) return { data: null, error: error.message }
-  // Supabase returns joined relations as arrays; map to flat shape
+
   const mapped: VariableExpense[] = (data ?? []).map((row: {
     id: string
-    date: string
     amount: number
     description: string | null
     category_id: string | null
     category: { name: string; color: string | null }[] | null
   }) => ({
     id: row.id,
-    date: row.date,
     amount: row.amount,
     description: row.description,
     category_id: row.category_id,
     category: Array.isArray(row.category) ? row.category[0] ?? null : row.category,
   }))
+
   return { data: mapped, error: null }
 }

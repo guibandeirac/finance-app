@@ -42,6 +42,8 @@ export default async function CardDetailPage({ params }: PageProps) {
       categories={categoriesResult.data ?? []}
       monthlyTotal={totalResult.data ?? 0}
       variableExpenses={variableResult.data ?? []}
+      year={year}
+      month={month}
     />
   )
 }

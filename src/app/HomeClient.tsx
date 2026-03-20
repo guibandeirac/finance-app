@@ -229,7 +229,6 @@ export function HomeClient({
       {/* Add transaction button (FAB on mobile, button on desktop) */}
       <AddTransactionButton
         categories={categories}
-        cards={cards}
         onSuccess={() => router.refresh()}
       />
 

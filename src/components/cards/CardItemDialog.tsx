@@ -32,6 +32,30 @@ interface CardItemDialogProps {
   onClose?: () => void
 }
 
+/** Returns the first day of the current month as YYYY-MM-DD */
+function currentMonthDate(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+/** Adds `n` months to a YYYY-MM-DD first-of-month date */
+function addMonths(dateStr: string, n: number): string {
+  const [y, m] = dateStr.split('-').map(Number)
+  const d = new Date(y, m - 1 + n, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+/** Converts YYYY-MM-DD → YYYY-MM (for <input type="month"> value) */
+function toMonthInput(dateStr: string | null | undefined): string {
+  if (!dateStr) return ''
+  return dateStr.slice(0, 7)
+}
+
+/** Converts YYYY-MM → YYYY-MM-01 */
+function fromMonthInput(monthStr: string): string {
+  return monthStr ? `${monthStr}-01` : ''
+}
+
 export function CardItemDialog({
   cardId,
   item,
@@ -49,11 +73,24 @@ export function CardItemDialog({
   const [description, setDescription] = useState(item?.description ?? '')
   const [amount, setAmount] = useState(item ? String(item.amount) : '')
   const [categoryId, setCategoryId] = useState<string>(item?.category_id ?? '')
-  const [totalInstallments, setTotalInstallments] = useState(
-    item?.total_installments ? String(item.total_installments) : ''
-  )
-  const [currentInstallment, setCurrentInstallment] = useState(
-    item?.current_installment ? String(item.current_installment) : '1'
+
+  // Installment-specific
+  const defaultStartMonth = item?.start_month
+    ? toMonthInput(item.start_month)
+    : toMonthInput(currentMonthDate())
+
+  const computedTotalFromItem =
+    item?.start_month && item?.end_month
+      ? (() => {
+          const [sy, sm] = item.start_month.split('-').map(Number)
+          const [ey, em] = item.end_month.split('-').map(Number)
+          return (ey - sy) * 12 + (em - sm) + 1
+        })()
+      : 1
+
+  const [startMonth, setStartMonth] = useState(defaultStartMonth)
+  const [quantity, setQuantity] = useState(
+    item ? String(computedTotalFromItem) : ''
   )
 
   function handleOpenChange(next: boolean) {
@@ -62,8 +99,8 @@ export function CardItemDialog({
       setDescription(item?.description ?? '')
       setAmount(item ? String(item.amount) : '')
       setCategoryId(item?.category_id ?? '')
-      setTotalInstallments(item?.total_installments ? String(item.total_installments) : '')
-      setCurrentInstallment(item?.current_installment ? String(item.current_installment) : '1')
+      setStartMonth(defaultStartMonth)
+      setQuantity(item ? String(computedTotalFromItem) : '')
     } else {
       onClose?.()
     }
@@ -83,29 +120,31 @@ export function CardItemDialog({
       return
     }
 
-    if (itemType === 'installment') {
-      const total = parseInt(totalInstallments, 10)
-      const current = parseInt(currentInstallment, 10)
-      if (isNaN(total) || total < 1) {
-        toast.error('Total de parcelas inválido.')
-        return
-      }
-      if (isNaN(current) || current < 1 || current > total) {
-        toast.error('Parcela atual inválida.')
-        return
-      }
-    }
-
-    const payload: CardItemData = {
+    let payload: CardItemData = {
       card_id: cardId,
       item_type: itemType,
       description: description.trim(),
       amount: parsedAmount,
       category_id: categoryId || null,
-      ...(itemType === 'installment' && {
-        total_installments: parseInt(totalInstallments, 10),
-        current_installment: parseInt(currentInstallment, 10),
-      }),
+    }
+
+    if (itemType === 'installment') {
+      const qty = parseInt(quantity, 10)
+      if (isNaN(qty) || qty < 1) {
+        toast.error('Quantidade de parcelas inválida.')
+        return
+      }
+      if (!startMonth) {
+        toast.error('Selecione o mês de início.')
+        return
+      }
+      const startMonthDate = fromMonthInput(startMonth)
+      const endMonthDate = addMonths(startMonthDate, qty - 1)
+      payload = {
+        ...payload,
+        start_month: startMonthDate,
+        end_month: endMonthDate,
+      }
     }
 
     startTransition(async () => {
@@ -128,6 +167,16 @@ export function CardItemDialog({
     : itemType === 'fixed'
     ? 'Adicionar fixo'
     : 'Adicionar parcela'
+
+  // Preview of computed end month
+  const previewEndMonth = (() => {
+    if (itemType !== 'installment') return null
+    const qty = parseInt(quantity, 10)
+    if (!startMonth || isNaN(qty) || qty < 1) return null
+    const endDate = addMonths(fromMonthInput(startMonth), qty - 1)
+    const [y, m] = endDate.split('-')
+    return `${m}/${y}`
+  })()
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -155,7 +204,7 @@ export function CardItemDialog({
             </label>
             <Input
               id="item-description"
-              placeholder="Ex: Netflix"
+              placeholder={itemType === 'installment' ? 'Ex: Notebook' : 'Ex: Netflix'}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={isPending}
@@ -186,45 +235,51 @@ export function CardItemDialog({
 
           {/* Campos de parcela */}
           {itemType === 'installment' && (
-            <div className="flex gap-3">
-              <div className="flex flex-1 flex-col gap-1.5">
-                <label
-                  htmlFor="item-total"
-                  className="text-xs font-medium"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  Total de parcelas
-                </label>
-                <Input
-                  id="item-total"
-                  type="number"
-                  min={1}
-                  placeholder="12"
-                  value={totalInstallments}
-                  onChange={(e) => setTotalInstallments(e.target.value)}
-                  disabled={isPending}
-                  required
-                />
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <label
+                    htmlFor="item-start-month"
+                    className="text-xs font-medium"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Mês de início
+                  </label>
+                  <Input
+                    id="item-start-month"
+                    type="month"
+                    value={startMonth}
+                    onChange={(e) => setStartMonth(e.target.value)}
+                    disabled={isPending}
+                    required
+                    style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}
+                  />
+                </div>
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <label
+                    htmlFor="item-quantity"
+                    className="text-xs font-medium"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Nº de parcelas
+                  </label>
+                  <Input
+                    id="item-quantity"
+                    type="number"
+                    min={1}
+                    placeholder="12"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    disabled={isPending}
+                    required
+                  />
+                </div>
               </div>
-              <div className="flex flex-1 flex-col gap-1.5">
-                <label
-                  htmlFor="item-current"
-                  className="text-xs font-medium"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  Parcela atual
-                </label>
-                <Input
-                  id="item-current"
-                  type="number"
-                  min={1}
-                  placeholder="1"
-                  value={currentInstallment}
-                  onChange={(e) => setCurrentInstallment(e.target.value)}
-                  disabled={isPending}
-                  required
-                />
-              </div>
+              {previewEndMonth && (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Término: <span style={{ color: 'var(--text-secondary)' }}>{previewEndMonth}</span>
+                </p>
+              )}
             </div>
           )}
 

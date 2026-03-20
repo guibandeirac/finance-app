@@ -6,15 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { TransactionForm } from '@/components/transactions/TransactionForm'
 import type { Category } from '@/app/actions/categories'
-import type { CreditCard } from '@/app/actions/cards'
 
 interface AddTransactionButtonProps {
   categories: Category[]
-  cards?: CreditCard[]
   onSuccess?: () => void
 }
 
-export function AddTransactionButton({ categories, cards, onSuccess }: AddTransactionButtonProps) {
+export function AddTransactionButton({ categories, onSuccess }: AddTransactionButtonProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -48,7 +46,6 @@ export function AddTransactionButton({ categories, cards, onSuccess }: AddTransa
         >
           <TransactionForm
             categories={categories}
-            cards={cards}
             onSuccess={() => {
               setOpen(false)
               onSuccess?.()
