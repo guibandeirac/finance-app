@@ -21,6 +21,7 @@ interface DashboardClientProps {
   prevSummary: MonthlySummaryData
   transactions: Transaction[]
   categories: Category[]
+  cardSpending: { category_id: string | null; amount: number }[]
 }
 
 function formatMoney(value: number): string {
@@ -97,6 +98,7 @@ export function DashboardClient({
   prevSummary,
   transactions,
   categories,
+  cardSpending,
 }: DashboardClientProps) {
   const router = useRouter()
   const currentDate = new Date(year, month - 1, 1)
@@ -202,7 +204,7 @@ export function DashboardClient({
             <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
               Gastos por Categoria
             </h2>
-            <CategoryDonutChart transactions={transactions} categories={categories} />
+            <CategoryDonutChart transactions={transactions} categories={categories} cardSpending={cardSpending} />
           </div>
 
           {/* Bar chart */}

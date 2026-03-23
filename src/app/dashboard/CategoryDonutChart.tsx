@@ -7,6 +7,7 @@ import type { Category } from '@/app/actions/categories'
 interface CategoryDonutChartProps {
   transactions: Transaction[]
   categories: Category[]
+  cardSpending?: { category_id: string | null; amount: number }[]
 }
 
 function formatMoney(value: number): string {
@@ -56,13 +57,13 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 
 const FALLBACK_COLOR = '#64748B'
 
-export function CategoryDonutChart({ transactions, categories }: CategoryDonutChartProps) {
-  // Filter only saida and diario transactions
+export function CategoryDonutChart({ transactions, categories, cardSpending = [] }: CategoryDonutChartProps) {
+  // Regular spending transactions (exclude card bill entries — they are expanded via cardSpending)
   const spendingTxs = transactions.filter(
-    (tx) => tx.type === 'saida' || tx.type === 'diario'
+    (tx) => (tx.type === 'saida' || tx.type === 'diario') && !tx.is_card_bill
   )
 
-  if (spendingTxs.length === 0) {
+  if (spendingTxs.length === 0 && cardSpending.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="space-y-2 w-full">
@@ -82,22 +83,21 @@ export function CategoryDonutChart({ transactions, categories }: CategoryDonutCh
   // Build category map
   const catMap = new Map(categories.map((c) => [c.id, c]))
 
-  // Group by category
+  // Group by category (regular transactions + expanded card bill items)
   const totals = new Map<string, number>()
   for (const tx of spendingTxs) {
     const key = tx.category_id ?? '__uncategorized__'
     totals.set(key, (totals.get(key) ?? 0) + Number(tx.amount))
   }
+  for (const item of cardSpending) {
+    const key = item.category_id ?? '__uncategorized__'
+    totals.set(key, (totals.get(key) ?? 0) + item.amount)
+  }
 
-  // Sort by amount descending
+  // Sort by amount descending, show all categories
   const sorted = Array.from(totals.entries()).sort(([, a], [, b]) => b - a)
 
-  // Top 5 + Outros
-  const top5 = sorted.slice(0, 5)
-  const rest = sorted.slice(5)
-  const othersTotal = rest.reduce((sum, [, v]) => sum + v, 0)
-
-  const slices = top5.map(([catId, amount]) => {
+  const slices = sorted.map(([catId, amount]) => {
     const cat = catMap.get(catId)
     return {
       name: cat?.name ?? 'Sem categoria',
@@ -105,14 +105,6 @@ export function CategoryDonutChart({ transactions, categories }: CategoryDonutCh
       color: cat?.color ?? FALLBACK_COLOR,
     }
   })
-
-  if (othersTotal > 0) {
-    slices.push({
-      name: 'Outros',
-      value: othersTotal,
-      color: FALLBACK_COLOR,
-    })
-  }
 
   const total = slices.reduce((sum, s) => sum + s.value, 0)
 

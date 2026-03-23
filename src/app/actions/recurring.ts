@@ -143,6 +143,29 @@ export async function deleteRecurring(id: string): Promise<{ error: string | nul
   return { error: null }
 }
 
+export async function excludeRecurringInstance(
+  recurringId: string,
+  year: number,
+  month: number
+): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Usuário não autenticado' }
+
+  const { error } = await supabase
+    .from('recurring_transaction_exclusions')
+    .upsert(
+      { recurring_id: recurringId, user_id: user.id, year, month },
+      { onConflict: 'recurring_id,year,month' }
+    )
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/')
+  return { error: null }
+}
+
 export async function toggleRecurring(
   id: string,
   is_active: boolean

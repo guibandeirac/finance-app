@@ -27,6 +27,7 @@ import {
 import { TransactionForm } from '@/components/transactions/TransactionForm'
 import { CardBillBreakdown } from '@/components/cards/CardBillBreakdown'
 import { deleteTransaction, type Transaction } from '@/app/actions/transactions'
+import { excludeRecurringInstance } from '@/app/actions/recurring'
 import type { Category } from '@/app/actions/categories'
 import type { CreditCard } from '@/app/actions/cards'
 import { cn } from '@/lib/utils'
@@ -70,6 +71,16 @@ export function TransactionCard({ transaction, categories, cards, onMutate }: Tr
 
   function handleDelete() {
     startTransition(async () => {
+      // If recurring, register an exclusion first so it won't regenerate
+      if (transaction.recurring_id) {
+        const txDate = parseISO(transaction.date + 'T12:00:00')
+        await excludeRecurringInstance(
+          transaction.recurring_id,
+          txDate.getFullYear(),
+          txDate.getMonth() + 1
+        )
+      }
+
       const result = await deleteTransaction(transaction.id)
       if (result.error) {
         toast.error(result.error)

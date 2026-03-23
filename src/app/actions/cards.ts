@@ -501,6 +501,120 @@ export async function getCardMonthlyTotal(
   return { data: total, error: null }
 }
 
+export async function getCardCategorySpending(
+  year: number,
+  month: number
+): Promise<{ data: { category_id: string | null; amount: number }[] | null; error: string | null }> {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: 'Usuário não autenticado' }
+
+  const billMonth = `${year}-${String(month).padStart(2, '0')}-01`
+
+  const [fixedRes, fixedOverridesRes, installRes, varRes] = await Promise.all([
+    supabase
+      .from('credit_card_items')
+      .select('id, category_id, amount')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .eq('item_type', 'fixed')
+      .or(`start_month.is.null,start_month.lte.${billMonth}`),
+    supabase
+      .from('credit_card_item_overrides')
+      .select('item_id, is_deleted, override_amount, override_category_id')
+      .eq('user_id', user.id)
+      .eq('reference_month', billMonth),
+    supabase
+      .from('credit_card_items')
+      .select('category_id, amount')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .eq('item_type', 'installment')
+      .lte('start_month', billMonth)
+      .gte('end_month', billMonth),
+    supabase
+      .from('credit_card_items')
+      .select('category_id, amount')
+      .eq('user_id', user.id)
+      .eq('item_type', 'variable')
+      .eq('reference_month', billMonth),
+  ])
+
+  if (fixedRes.error) return { data: null, error: fixedRes.error.message }
+  if (fixedOverridesRes.error) return { data: null, error: fixedOverridesRes.error.message }
+  if (installRes.error) return { data: null, error: installRes.error.message }
+  if (varRes.error) return { data: null, error: varRes.error.message }
+
+  const overrideMap = new Map(
+    (fixedOverridesRes.data ?? []).map((o) => [o.item_id, o])
+  )
+
+  const fixedItems = (fixedRes.data ?? [])
+    .filter((i) => {
+      const o = overrideMap.get(i.id)
+      return !o?.is_deleted
+    })
+    .map((i) => {
+      const o = overrideMap.get(i.id)
+      return {
+        category_id: (o?.override_category_id ?? i.category_id) as string | null,
+        amount: Number(o?.override_amount ?? i.amount),
+      }
+    })
+
+  const items = [
+    ...fixedItems,
+    ...(installRes.data ?? []).map((i) => ({ category_id: i.category_id as string | null, amount: Number(i.amount) })),
+    ...(varRes.data ?? []).map((i) => ({ category_id: i.category_id as string | null, amount: Number(i.amount) })),
+  ]
+
+  return { data: items, error: null }
+}
+
+// ── Month-specific card item overrides ─────────────────────────────────────────
+
+export async function upsertCardItemOverride(
+  itemId: string,
+  referenceMonth: string, // YYYY-MM-DD
+  data: { amount?: number; category_id?: string | null; is_deleted?: boolean }
+): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Usuário não autenticado' }
+
+  const { error } = await supabase
+    .from('credit_card_item_overrides')
+    .upsert({
+      item_id: itemId,
+      user_id: user.id,
+      reference_month: referenceMonth,
+      is_deleted: data.is_deleted ?? false,
+      ...(data.amount !== undefined && { override_amount: data.amount }),
+      ...(data.category_id !== undefined && { override_category_id: data.category_id }),
+    }, { onConflict: 'item_id,reference_month' })
+
+  if (error) return { error: error.message }
+
+  // Fetch card_id to recalculate bill
+  const { data: item } = await supabase
+    .from('credit_card_items')
+    .select('card_id')
+    .eq('id', itemId)
+    .single()
+
+  if (item?.card_id) {
+    await supabase.rpc('recalculate_card_bills', {
+      p_card_id: item.card_id,
+      p_user_id: user.id,
+    })
+  }
+
+  revalidatePath('/')
+  return { error: null }
+}
+
 export async function getCardVariableExpenses(
   card_id: string,
   year: number,

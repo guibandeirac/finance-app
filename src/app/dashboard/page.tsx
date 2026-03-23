@@ -7,6 +7,7 @@ export const metadata: Metadata = {
 }
 import { getCategories } from '@/app/actions/categories'
 import { getTransactionsByMonth } from '@/app/actions/transactions'
+import { getCardCategorySpending } from '@/app/actions/cards'
 import { DashboardClient } from './DashboardClient'
 import { subMonths } from 'date-fns'
 
@@ -61,6 +62,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     prevSummaryResult,
     categoriesResult,
     transactionsResult,
+    cardSpendingResult,
   ] = await Promise.all([
     supabase.rpc('get_daily_balance', {
       p_user_id: user.id,
@@ -79,6 +81,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     }),
     getCategories(),
     getTransactionsByMonth(year, month),
+    getCardCategorySpending(year, month),
   ])
 
   const dailyBalances: DailyBalanceData[] = ((dailyBalanceResult.data ?? []) as DailyBalanceData[]).map((row) => ({
@@ -111,6 +114,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const categories = categoriesResult.data ?? []
   const transactions = transactionsResult.data ?? []
+  const cardSpending = cardSpendingResult.data ?? []
 
   return (
     <DashboardClient
@@ -123,6 +127,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       prevSummary={prevSummary}
       transactions={transactions}
       categories={categories}
+      cardSpending={cardSpending}
     />
   )
 }

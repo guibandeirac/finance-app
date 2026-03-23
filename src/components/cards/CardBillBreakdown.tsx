@@ -18,7 +18,7 @@ import {
   createVariableCardItem,
   deleteVariableCardItem,
   updateCardItem,
-  deleteCardItem,
+  upsertCardItemOverride,
   type BillBreakdown,
   type BillBreakdownItem,
 } from '@/app/actions/cards'
@@ -89,6 +89,8 @@ export function CardBillBreakdown({
     setEditCatId(item.category_id ?? '')
   }
 
+  const referenceMonth = `${year}-${String(month).padStart(2, '0')}-01`
+
   function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!editingItem) return
@@ -97,11 +99,19 @@ export function CardBillBreakdown({
     if (!amount || amount <= 0) { toast.error('Valor inválido.'); return }
 
     startTransition(async () => {
-      const result = await updateCardItem(editingItem.id, {
-        description: editDesc.trim(),
-        amount,
-        category_id: editCatId || null,
-      })
+      // Fixed items: save as a month-specific override (never touch the global template)
+      // Variable/installment items: edit globally (they are already month-scoped)
+      const isFixed = editingItem.item_type === 'fixed'
+      const result = isFixed
+        ? await upsertCardItemOverride(editingItem.id, referenceMonth, {
+            amount,
+            category_id: editCatId || null,
+          })
+        : await updateCardItem(editingItem.id, {
+            amount,
+            category_id: editCatId || null,
+          })
+
       if (result.error) {
         toast.error(result.error)
       } else {
@@ -157,12 +167,13 @@ export function CardBillBreakdown({
   }
 
   function handleDeleteFixed(item: BillBreakdownItem) {
+    // Creates a month-specific "deleted" override — does NOT remove the global template
     startTransition(async () => {
-      const result = await deleteCardItem(item.id)
+      const result = await upsertCardItemOverride(item.id, referenceMonth, { is_deleted: true })
       if (result.error) {
         toast.error(result.error)
       } else {
-        toast.success('Item removido.')
+        toast.success('Removido somente neste mês.')
         fetchBreakdown()
         onMutate?.()
       }
