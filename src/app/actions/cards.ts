@@ -469,7 +469,8 @@ export async function getCardMonthlyTotal(
       .eq('card_id', card_id)
       .eq('user_id', user.id)
       .eq('is_active', true)
-      .eq('item_type', 'fixed'),
+      .eq('item_type', 'fixed')
+      .or(`start_month.is.null,start_month.lte.${billMonth}`),
     supabase
       .from('credit_card_items')
       .select('amount')

@@ -28,15 +28,19 @@ const PRESET_COLORS = [
 
 interface AddCardDialogProps {
   card?: CreditCard
-  trigger: React.ReactNode
+  trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   onSuccess?: () => void
   onClose?: () => void
 }
 
-export function AddCardDialog({ card, trigger, onSuccess, onClose }: AddCardDialogProps) {
+export function AddCardDialog({ card, trigger, open: openProp, onOpenChange: onOpenChangeProp, onSuccess, onClose }: AddCardDialogProps) {
   const isEditing = !!card
+  const isControlled = openProp !== undefined
 
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = isControlled ? openProp! : openState
   const [isPending, startTransition] = useTransition()
 
   const [name, setName] = useState(card?.name ?? '')
@@ -45,7 +49,8 @@ export function AddCardDialog({ card, trigger, onSuccess, onClose }: AddCardDial
   const [color, setColor] = useState(card?.color ?? PRESET_COLORS[0])
 
   function handleOpenChange(next: boolean) {
-    setOpen(next)
+    if (!isControlled) setOpenState(next)
+    onOpenChangeProp?.(next)
     if (next) {
       setName(card?.name ?? '')
       setDueDay(String(card?.due_day ?? ''))
@@ -92,7 +97,7 @@ export function AddCardDialog({ card, trigger, onSuccess, onClose }: AddCardDial
         toast.error(result.error)
       } else {
         toast.success(isEditing ? 'Cartão atualizado!' : 'Cartão criado!')
-        setOpen(false)
+        handleOpenChange(false)
         onSuccess?.()
       }
     })
@@ -100,10 +105,12 @@ export function AddCardDialog({ card, trigger, onSuccess, onClose }: AddCardDial
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogPrimitive.Trigger
-        data-slot="dialog-trigger"
-        render={trigger as React.ReactElement}
-      />
+      {trigger && (
+        <DialogPrimitive.Trigger
+          data-slot="dialog-trigger"
+          render={trigger as React.ReactElement}
+        />
+      )}
 
       <DialogContent className="sm:max-w-sm" style={{ backgroundColor: 'var(--surface)' }}>
         <DialogHeader>

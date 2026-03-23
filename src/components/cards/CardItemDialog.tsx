@@ -27,7 +27,9 @@ interface CardItemDialogProps {
   item?: CardItemType
   itemType: 'fixed' | 'installment'
   categories: Category[]
-  trigger: React.ReactNode
+  trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   onSuccess?: () => void
   onClose?: () => void
 }
@@ -62,19 +64,23 @@ export function CardItemDialog({
   itemType,
   categories,
   trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
   onSuccess,
   onClose,
 }: CardItemDialogProps) {
   const isEditing = !!item
+  const isControlled = openProp !== undefined
 
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = isControlled ? openProp! : openState
   const [isPending, startTransition] = useTransition()
 
   const [description, setDescription] = useState(item?.description ?? '')
   const [amount, setAmount] = useState(item ? String(item.amount) : '')
   const [categoryId, setCategoryId] = useState<string>(item?.category_id ?? '')
 
-  // Installment-specific
+  // start_month used for both fixed (optional) and installment (required)
   const defaultStartMonth = item?.start_month
     ? toMonthInput(item.start_month)
     : toMonthInput(currentMonthDate())
@@ -94,7 +100,8 @@ export function CardItemDialog({
   )
 
   function handleOpenChange(next: boolean) {
-    setOpen(next)
+    if (!isControlled) setOpenState(next)
+    onOpenChangeProp?.(next)
     if (next) {
       setDescription(item?.description ?? '')
       setAmount(item ? String(item.amount) : '')
@@ -128,6 +135,14 @@ export function CardItemDialog({
       category_id: categoryId || null,
     }
 
+    if (itemType === 'fixed') {
+      // start_month is optional for fixed items (null = start immediately)
+      payload = {
+        ...payload,
+        start_month: startMonth ? fromMonthInput(startMonth) : null,
+      }
+    }
+
     if (itemType === 'installment') {
       const qty = parseInt(quantity, 10)
       if (isNaN(qty) || qty < 1) {
@@ -156,7 +171,7 @@ export function CardItemDialog({
         toast.error(result.error)
       } else {
         toast.success(isEditing ? 'Item atualizado!' : 'Item adicionado!')
-        setOpen(false)
+        handleOpenChange(false)
         onSuccess?.()
       }
     })
@@ -180,10 +195,12 @@ export function CardItemDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogPrimitive.Trigger
-        data-slot="dialog-trigger"
-        render={trigger as React.ReactElement}
-      />
+      {trigger && (
+        <DialogPrimitive.Trigger
+          data-slot="dialog-trigger"
+          render={trigger as React.ReactElement}
+        />
+      )}
 
       <DialogContent className="sm:max-w-sm" style={{ backgroundColor: 'var(--surface)' }}>
         <DialogHeader>
@@ -232,6 +249,31 @@ export function CardItemDialog({
               required
             />
           </div>
+
+          {/* Mês de início — fixos (opcional) */}
+          {itemType === 'fixed' && (
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="item-fixed-start-month"
+                className="text-xs font-medium"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Cobrar a partir de{' '}
+                <span style={{ color: 'var(--text-muted)' }}>(opcional)</span>
+              </label>
+              <Input
+                id="item-fixed-start-month"
+                type="month"
+                value={startMonth}
+                onChange={(e) => setStartMonth(e.target.value)}
+                disabled={isPending}
+                style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}
+              />
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                Deixe em branco para incluir em todos os meses.
+              </p>
+            </div>
+          )}
 
           {/* Campos de parcela */}
           {itemType === 'installment' && (

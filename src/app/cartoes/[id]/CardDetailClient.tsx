@@ -252,6 +252,7 @@ function Section({
   onSuccess,
 }: SectionProps) {
   const addLabel = itemType === 'fixed' ? 'Adicionar fixo' : 'Adicionar parcela'
+  const [editItem, setEditItem] = useState<CardItemType | null>(null)
 
   return (
     <div>
@@ -345,22 +346,13 @@ function Section({
                       }
                     />
                     <DropdownMenuContent align="end">
-                      <CardItemDialog
-                        cardId={cardId}
-                        item={item}
-                        itemType={item.item_type as 'fixed' | 'installment'}
-                        categories={categories}
-                        trigger={
-                          <DropdownMenuItem
-                            onSelect={(e) => e.preventDefault()}
-                            className="cursor-pointer"
-                          >
-                            <PencilIcon className="mr-2 size-3.5" />
-                            Editar
-                          </DropdownMenuItem>
-                        }
-                        onSuccess={onSuccess}
-                      />
+                      <DropdownMenuItem
+                        onClick={() => setEditItem(item)}
+                        className="cursor-pointer"
+                      >
+                        <PencilIcon className="mr-2 size-3.5" />
+                        Editar
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => onDelete(item)}
                         className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
@@ -376,6 +368,18 @@ function Section({
           })
         )}
       </div>
+
+      {/* Edit dialog — controlled externally, opened from dropdown */}
+      <CardItemDialog
+        key={editItem?.id ?? 'none'}
+        cardId={cardId}
+        item={editItem ?? undefined}
+        itemType={(editItem?.item_type as 'fixed' | 'installment') ?? itemType}
+        categories={categories}
+        open={editItem !== null}
+        onOpenChange={(open) => { if (!open) setEditItem(null) }}
+        onSuccess={() => { setEditItem(null); onSuccess() }}
+      />
     </div>
   )
 }

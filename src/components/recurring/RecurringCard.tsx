@@ -38,6 +38,7 @@ export function RecurringCard({ recurring, categories }: RecurringCardProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   const dotColor = TYPE_COLORS[recurring.type] ?? '#94A3B8'
   const dotBg = TYPE_BG_COLORS[recurring.type] ?? '#F1F5F9'
@@ -124,20 +125,13 @@ export function RecurringCard({ recurring, categories }: RecurringCardProps) {
           }
         />
         <DropdownMenuContent align="end">
-          <RecurringDialog
-            recurring={recurring}
-            categories={categories}
-            trigger={
-              <DropdownMenuItem
-                onSelect={(e) => e.preventDefault()}
-                className="cursor-pointer"
-              >
-                <PencilIcon className="mr-2 size-3.5" />
-                Editar
-              </DropdownMenuItem>
-            }
-            onSuccess={() => router.refresh()}
-          />
+          <DropdownMenuItem
+            onClick={() => setEditOpen(true)}
+            className="cursor-pointer"
+          >
+            <PencilIcon className="mr-2 size-3.5" />
+            Editar
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => setConfirmOpen(true)}
             className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
@@ -147,6 +141,14 @@ export function RecurringCard({ recurring, categories }: RecurringCardProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <RecurringDialog
+        recurring={recurring}
+        categories={categories}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSuccess={() => { setEditOpen(false); router.refresh() }}
+      />
 
       <ConfirmDialog
         open={confirmOpen}

@@ -32,7 +32,9 @@ import type { Category } from '@/app/actions/categories'
 interface RecurringDialogProps {
   recurring?: RecurringTransaction
   categories: Category[]
-  trigger: React.ReactNode
+  trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   onSuccess?: () => void
   onClose?: () => void
 }
@@ -47,12 +49,16 @@ export function RecurringDialog({
   recurring,
   categories,
   trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
   onSuccess,
   onClose,
 }: RecurringDialogProps) {
   const isEditing = !!recurring
+  const isControlled = openProp !== undefined
 
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = isControlled ? openProp! : openState
   const [isPending, startTransition] = useTransition()
 
   const [description, setDescription] = useState(recurring?.description ?? '')
@@ -68,7 +74,8 @@ export function RecurringDialog({
   const [endDate, setEndDate] = useState(recurring?.end_date ?? '')
 
   function handleOpenChange(next: boolean) {
-    setOpen(next)
+    if (!isControlled) setOpenState(next)
+    onOpenChangeProp?.(next)
     if (next) {
       setDescription(recurring?.description ?? '')
       setAmount(recurring ? String(recurring.amount) : '')
@@ -131,7 +138,7 @@ export function RecurringDialog({
         toast.error(result.error)
       } else {
         toast.success(isEditing ? 'Recorrência atualizada!' : 'Recorrência criada!')
-        setOpen(false)
+        handleOpenChange(false)
         onSuccess?.()
       }
     })
@@ -139,10 +146,12 @@ export function RecurringDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogPrimitive.Trigger
-        data-slot="dialog-trigger"
-        render={trigger as React.ReactElement}
-      />
+      {trigger && (
+        <DialogPrimitive.Trigger
+          data-slot="dialog-trigger"
+          render={trigger as React.ReactElement}
+        />
+      )}
 
       <DialogContent className="sm:max-w-sm" style={{ backgroundColor: 'var(--surface)' }}>
         <DialogHeader>

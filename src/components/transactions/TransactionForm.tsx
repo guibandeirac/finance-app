@@ -37,6 +37,7 @@ interface TransactionFormProps {
   transaction?: Transaction
   categories: Category[]
   onSuccess?: () => void
+  defaultDate?: string  // YYYY-MM-DD, used when creating a new transaction
 }
 
 function formatAmountDisplay(value: string): string {
@@ -51,13 +52,13 @@ function parseAmount(display: string): number {
   return parseFloat(display.replace(/\./g, '').replace(',', '.')) || 0
 }
 
-export function TransactionForm({ transaction, categories, onSuccess }: TransactionFormProps) {
+export function TransactionForm({ transaction, categories, onSuccess, defaultDate: defaultDateProp }: TransactionFormProps) {
   const isEditing = !!transaction
   const [isPending, startTransition] = useTransition()
 
   const defaultDate = transaction?.date
     ? new Date(transaction.date + 'T12:00:00')
-    : new Date()
+    : (defaultDateProp ? new Date(defaultDateProp + 'T12:00:00') : new Date())
 
   const [date, setDate] = useState<Date>(defaultDate)
   const [calendarOpen, setCalendarOpen] = useState(false)

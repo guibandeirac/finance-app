@@ -106,7 +106,22 @@ export async function updateRecurring(
 
   if (error) return { data: null, error: error.message }
 
+  // Delete pre-generated future transactions (next month onwards) so they get
+  // re-generated with the updated values. Past/current-month records are kept.
+  const nextMonthStart = new Date()
+  nextMonthStart.setDate(1)
+  nextMonthStart.setMonth(nextMonthStart.getMonth() + 1)
+  const nextMonthStr = nextMonthStart.toISOString().split('T')[0]
+
+  await supabase
+    .from('transactions')
+    .delete()
+    .eq('recurring_id', id)
+    .eq('user_id', user.id)
+    .gte('date', nextMonthStr)
+
   revalidatePath('/recorrentes')
+  revalidatePath('/')
   return { data, error: null }
 }
 

@@ -226,24 +226,21 @@ export function HomeClient({
         </DragOverlay>
       </DndContext>
 
-      {/* Add transaction button (FAB on mobile, button on desktop) */}
+      {/* Single AddTransactionButton — handles both FAB and date-specific sheet */}
       <AddTransactionButton
         categories={categories}
-        onSuccess={() => router.refresh()}
+        open={addSheetOpen}
+        onOpenChange={(next) => {
+          setAddSheetOpen(next)
+          if (!next) setAddForDate(null)
+        }}
+        defaultDate={addForDate ?? undefined}
+        onSuccess={() => {
+          setAddSheetOpen(false)
+          setAddForDate(null)
+          router.refresh()
+        }}
       />
-
-      {/* Sheet for adding transaction on a specific date */}
-      {addForDate && addSheetOpen && (
-        <AddTransactionButton
-          key={addForDate}
-          categories={categories}
-          onSuccess={() => {
-            setAddSheetOpen(false)
-            setAddForDate(null)
-            router.refresh()
-          }}
-        />
-      )}
     </div>
   )
 }

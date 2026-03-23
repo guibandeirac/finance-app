@@ -26,6 +26,7 @@ export function CardCard({ card, monthlyTotal, activeItemsCount }: CardCardProps
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   function handleDeleteClick(e: React.MouseEvent) {
     e.stopPropagation()
@@ -81,19 +82,13 @@ export function CardCard({ card, monthlyTotal, activeItemsCount }: CardCardProps
               }
             />
             <DropdownMenuContent align="end">
-              <AddCardDialog
-                card={card}
-                trigger={
-                  <DropdownMenuItem
-                    onSelect={(e) => e.preventDefault()}
-                    className="cursor-pointer"
-                  >
-                    <PencilIcon className="mr-2 size-3.5" />
-                    Editar
-                  </DropdownMenuItem>
-                }
-                onSuccess={() => router.refresh()}
-              />
+              <DropdownMenuItem
+                onClick={() => setEditOpen(true)}
+                className="cursor-pointer"
+              >
+                <PencilIcon className="mr-2 size-3.5" />
+                Editar
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleDeleteClick}
                 className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
@@ -105,6 +100,13 @@ export function CardCard({ card, monthlyTotal, activeItemsCount }: CardCardProps
           </DropdownMenu>
         </div>
       </div>
+
+      <AddCardDialog
+        card={card}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSuccess={() => { setEditOpen(false); router.refresh() }}
+      />
 
       <ConfirmDialog
         open={confirmOpen}

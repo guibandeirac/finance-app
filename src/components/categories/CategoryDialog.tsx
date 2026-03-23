@@ -52,7 +52,9 @@ const TYPE_OPTIONS: { value: CategoryType; label: string }[] = [
 
 interface CategoryDialogProps {
   category?: Category
-  trigger: React.ReactNode
+  trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   onSuccess?: () => void
   onClose?: () => void
 }
@@ -60,12 +62,16 @@ interface CategoryDialogProps {
 export function CategoryDialog({
   category,
   trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
   onSuccess,
   onClose,
 }: CategoryDialogProps) {
   const isEditing = !!category
+  const isControlled = openProp !== undefined
 
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = isControlled ? openProp! : openState
   const [isPending, startTransition] = useTransition()
 
   const [name, setName] = useState(category?.name ?? '')
@@ -74,7 +80,8 @@ export function CategoryDialog({
   const [icon, setIcon] = useState<string>(category?.icon ?? '')
 
   function handleOpenChange(next: boolean) {
-    setOpen(next)
+    if (!isControlled) setOpenState(next)
+    onOpenChangeProp?.(next)
     if (next) {
       // Reset to category values (or defaults) each time it opens
       setName(category?.name ?? '')
@@ -110,7 +117,7 @@ export function CategoryDialog({
         toast.error(result.error)
       } else {
         toast.success(isEditing ? 'Categoria atualizada!' : 'Categoria criada!')
-        setOpen(false)
+        handleOpenChange(false)
         onSuccess?.()
       }
     })
@@ -118,10 +125,12 @@ export function CategoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogPrimitive.Trigger
-        data-slot="dialog-trigger"
-        render={trigger as React.ReactElement}
-      />
+      {trigger && (
+        <DialogPrimitive.Trigger
+          data-slot="dialog-trigger"
+          render={trigger as React.ReactElement}
+        />
+      )}
 
       <DialogContent className="sm:max-w-md" style={{ backgroundColor: 'var(--surface)' }}>
         <DialogHeader>

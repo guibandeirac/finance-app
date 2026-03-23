@@ -78,25 +78,14 @@ export function CategoriasClient({ categories }: CategoriasClientProps) {
         />
       </div>
 
-      {/* Edit dialog — rendered when an edit target is chosen; auto-opens via ref click */}
-      {editTarget && (
-        <CategoryDialog
-          key={editTarget.id}
-          category={editTarget}
-          trigger={
-            <button
-              type="button"
-              className="sr-only"
-              ref={(el) => {
-                if (el) el.click()
-              }}
-              aria-hidden="true"
-            />
-          }
-          onSuccess={handleSuccess}
-          onClose={() => setEditTarget(null)}
-        />
-      )}
+      {/* Edit dialog — controlled externally */}
+      <CategoryDialog
+        key={editTarget?.id ?? 'none'}
+        category={editTarget ?? undefined}
+        open={editTarget !== null}
+        onOpenChange={(open) => { if (!open) setEditTarget(null) }}
+        onSuccess={handleSuccess}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}

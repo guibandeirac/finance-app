@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useTransition } from 'react'
-import { PlusIcon, Trash2Icon, LoaderIcon } from 'lucide-react'
+import { PlusIcon, Trash2Icon, LoaderIcon, PencilIcon, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,8 @@ import {
   getCardBillBreakdown,
   createVariableCardItem,
   deleteVariableCardItem,
+  updateCardItem,
+  deleteCardItem,
   type BillBreakdown,
   type BillBreakdownItem,
 } from '@/app/actions/cards'
@@ -61,6 +63,12 @@ export function CardBillBreakdown({
   const [addAmount, setAddAmount] = useState('')
   const [addCatId, setAddCatId] = useState<string>('')
 
+  // Edit state
+  const [editingItem, setEditingItem] = useState<BillBreakdownItem | null>(null)
+  const [editDesc, setEditDesc] = useState('')
+  const [editAmount, setEditAmount] = useState('')
+  const [editCatId, setEditCatId] = useState('')
+
   function fetchBreakdown() {
     setLoading(true)
     getCardBillBreakdown(creditCardId, year, month).then(({ data }) => {
@@ -73,6 +81,37 @@ export function CardBillBreakdown({
     fetchBreakdown()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creditCardId, year, month])
+
+  function startEdit(item: BillBreakdownItem) {
+    setEditingItem(item)
+    setEditDesc(item.description)
+    setEditAmount(item.amount.toFixed(2).replace('.', ','))
+    setEditCatId(item.category_id ?? '')
+  }
+
+  function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingItem) return
+    if (!editDesc.trim()) { toast.error('Descrição obrigatória.'); return }
+    const amount = parseAmount(editAmount)
+    if (!amount || amount <= 0) { toast.error('Valor inválido.'); return }
+
+    startTransition(async () => {
+      const result = await updateCardItem(editingItem.id, {
+        description: editDesc.trim(),
+        amount,
+        category_id: editCatId || null,
+      })
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success('Item atualizado!')
+        setEditingItem(null)
+        fetchBreakdown()
+        onMutate?.()
+      }
+    })
+  }
 
   function handleAddSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -104,7 +143,7 @@ export function CardBillBreakdown({
     })
   }
 
-  function handleDelete(item: BillBreakdownItem) {
+  function handleDeleteVariable(item: BillBreakdownItem) {
     startTransition(async () => {
       const result = await deleteVariableCardItem(item.id)
       if (result.error) {
@@ -117,8 +156,92 @@ export function CardBillBreakdown({
     })
   }
 
+  function handleDeleteFixed(item: BillBreakdownItem) {
+    startTransition(async () => {
+      const result = await deleteCardItem(item.id)
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success('Item removido.')
+        fetchBreakdown()
+        onMutate?.()
+      }
+    })
+  }
+
   const expenseCategories = categories.filter(
     (c) => c.type === 'saida' || c.type === 'all'
+  )
+
+  const editForm = (
+    <form onSubmit={handleEditSubmit} className="flex flex-col gap-2 px-3 py-2" style={{ backgroundColor: 'var(--surface)' }}>
+      <Input
+        placeholder="Descrição"
+        value={editDesc}
+        onChange={(e) => setEditDesc(e.target.value)}
+        disabled={isPending}
+        autoFocus
+      />
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <span
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-xs pointer-events-none"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            R$
+          </span>
+          <Input
+            type="text"
+            inputMode="numeric"
+            placeholder="0,00"
+            value={editAmount}
+            onChange={(e) => {
+              const raw = e.target.value.replace(/\D/g, '')
+              setEditAmount(raw ? formatAmountDisplay(raw) : '')
+            }}
+            disabled={isPending}
+            className="pl-9 font-mono"
+          />
+        </div>
+        <Select
+          value={editCatId}
+          onValueChange={(v) => setEditCatId(v === '__none__' ? '' : (v ?? ''))}
+        >
+          <SelectTrigger className="flex-1" size="default">
+            <SelectValue placeholder="Categoria" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">Sem categoria</SelectItem>
+            {expenseCategories.map((cat) => (
+              <SelectItem key={cat.id} value={cat.id}>
+                {cat.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="flex-1"
+          onClick={() => setEditingItem(null)}
+          disabled={isPending}
+        >
+          <XIcon className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="submit"
+          size="sm"
+          className="flex-1"
+          disabled={isPending}
+          style={{ backgroundColor: 'var(--accent-color)', color: '#fff' }}
+        >
+          {isPending ? 'Salvando...' : 'Salvar'}
+        </Button>
+      </div>
+    </form>
   )
 
   if (loading) {
@@ -152,12 +275,19 @@ export function CardBillBreakdown({
 
       {/* Fixos */}
       {fixed.length > 0 && (
-        <Section title="Fixos" items={fixed} onDelete={undefined} />
+        <Section
+          title="Fixos"
+          items={fixed}
+          editingItemId={editingItem?.id ?? null}
+          editForm={editForm}
+          onEdit={startEdit}
+          onDelete={handleDeleteFixed}
+        />
       )}
 
       {/* Parcelas */}
       {installments.length > 0 && (
-        <Section title="Parcelas" items={installments} onDelete={undefined} />
+        <Section title="Parcelas" items={installments} />
       )}
 
       {/* Variáveis */}
@@ -178,35 +308,47 @@ export function CardBillBreakdown({
           >
             {variable.map((item, idx) => {
               const cat = expenseCategories.find((c) => c.id === item.category_id)
+              const isEditing = editingItem?.id === item.id
               return (
                 <div key={item.id}>
                   {idx > 0 && <Separator style={{ backgroundColor: 'var(--border)' }} />}
-                  <div
-                    className="flex items-center gap-2 px-3 py-2"
-                    style={{ backgroundColor: 'var(--surface)' }}
-                  >
-                    {cat?.color && (
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: cat.color }}
-                      />
-                    )}
-                    <span className="flex-1 min-w-0 truncate text-xs" style={{ color: 'var(--text-primary)' }}>
-                      {item.description}
-                    </span>
-                    <span className="font-mono text-xs shrink-0" style={{ color: 'var(--negative)' }}>
-                      {fmt(Number(item.amount))}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(item)}
-                      disabled={isPending}
-                      className="shrink-0 rounded p-0.5 hover:bg-[var(--surface-hover)] disabled:opacity-40"
-                      aria-label="Remover"
+                  {isEditing ? editForm : (
+                    <div
+                      className="flex items-center gap-2 px-3 py-2"
+                      style={{ backgroundColor: 'var(--surface)' }}
                     >
-                      <Trash2Icon className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
-                    </button>
-                  </div>
+                      {cat?.color && (
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: cat.color }}
+                        />
+                      )}
+                      <span className="flex-1 min-w-0 truncate text-xs" style={{ color: 'var(--text-primary)' }}>
+                        {item.description}
+                      </span>
+                      <span className="font-mono text-xs shrink-0" style={{ color: 'var(--negative)' }}>
+                        {fmt(Number(item.amount))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => startEdit(item)}
+                        disabled={isPending}
+                        className="shrink-0 rounded p-0.5 hover:bg-[var(--surface-hover)] disabled:opacity-40"
+                        aria-label="Editar"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteVariable(item)}
+                        disabled={isPending}
+                        className="shrink-0 rounded p-0.5 hover:bg-[var(--surface-hover)] disabled:opacity-40"
+                        aria-label="Remover"
+                      >
+                        <Trash2Icon className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -308,10 +450,13 @@ export function CardBillBreakdown({
 interface SectionProps {
   title: string
   items: BillBreakdownItem[]
+  editingItemId?: string | null
+  editForm?: React.ReactNode
+  onEdit?: (item: BillBreakdownItem) => void
   onDelete?: (item: BillBreakdownItem) => void
 }
 
-function Section({ title, items, onDelete }: SectionProps) {
+function Section({ title, items, editingItemId, editForm, onEdit, onDelete }: SectionProps) {
   return (
     <div>
       <p className="mb-1.5 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
@@ -324,37 +469,52 @@ function Section({ title, items, onDelete }: SectionProps) {
         className="rounded-lg border overflow-hidden"
         style={{ borderColor: 'var(--border)' }}
       >
-        {items.map((item, idx) => (
-          <div key={item.id}>
-            {idx > 0 && <Separator style={{ backgroundColor: 'var(--border)' }} />}
-            <div
-              className="flex items-center gap-2 px-3 py-2"
-              style={{ backgroundColor: 'var(--surface)' }}
-            >
-              <span className="flex-1 min-w-0 truncate text-xs" style={{ color: 'var(--text-primary)' }}>
-                {item.description}
-                {item.item_type === 'installment' && item.current_inst != null && item.total_inst != null && (
-                  <span className="ml-1.5" style={{ color: 'var(--text-muted)' }}>
-                    {item.current_inst}/{item.total_inst}
-                  </span>
-                )}
-              </span>
-              <span className="font-mono text-xs shrink-0" style={{ color: 'var(--text-secondary)' }}>
-                {fmt(Number(item.amount))}
-              </span>
-              {onDelete && (
-                <button
-                  type="button"
-                  onClick={() => onDelete(item)}
-                  className="shrink-0 rounded p-0.5 hover:bg-[var(--surface-hover)]"
-                  aria-label="Remover"
+        {items.map((item, idx) => {
+          const isEditing = editingItemId === item.id
+          return (
+            <div key={item.id}>
+              {idx > 0 && <Separator style={{ backgroundColor: 'var(--border)' }} />}
+              {isEditing && editForm ? editForm : (
+                <div
+                  className="flex items-center gap-2 px-3 py-2"
+                  style={{ backgroundColor: 'var(--surface)' }}
                 >
-                  <Trash2Icon className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
-                </button>
+                  <span className="flex-1 min-w-0 truncate text-xs" style={{ color: 'var(--text-primary)' }}>
+                    {item.description}
+                    {item.item_type === 'installment' && item.current_inst != null && item.total_inst != null && (
+                      <span className="ml-1.5" style={{ color: 'var(--text-muted)' }}>
+                        {item.current_inst}/{item.total_inst}
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-mono text-xs shrink-0" style={{ color: 'var(--text-secondary)' }}>
+                    {fmt(Number(item.amount))}
+                  </span>
+                  {onEdit && (
+                    <button
+                      type="button"
+                      onClick={() => onEdit(item)}
+                      className="shrink-0 rounded p-0.5 hover:bg-[var(--surface-hover)]"
+                      aria-label="Editar"
+                    >
+                      <PencilIcon className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      type="button"
+                      onClick={() => onDelete(item)}
+                      className="shrink-0 rounded p-0.5 hover:bg-[var(--surface-hover)]"
+                      aria-label="Remover"
+                    >
+                      <Trash2Icon className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
