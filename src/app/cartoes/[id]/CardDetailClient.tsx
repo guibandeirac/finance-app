@@ -401,6 +401,7 @@ function VariableSection({ cardId, categories, expenses, year, month, onMutate }
   const [desc, setDesc] = useState('')
   const [amountDisplay, setAmountDisplay] = useState('')
   const [catId, setCatId] = useState<string>('')
+  const [expenseDate, setExpenseDate] = useState<string>('')
 
   const expenseCategories = categories.filter((c) => c.type === 'saida' || c.type === 'all')
 
@@ -419,6 +420,7 @@ function VariableSection({ cardId, categories, expenses, year, month, onMutate }
         amount,
         category_id: catId || null,
         reference_month: referenceMonth,
+        expense_date: expenseDate || null,
       })
       if (result.error) {
         toast.error(result.error)
@@ -427,6 +429,7 @@ function VariableSection({ cardId, categories, expenses, year, month, onMutate }
         setDesc('')
         setAmountDisplay('')
         setCatId('')
+        setExpenseDate('')
         setShowForm(false)
         onMutate()
       }
@@ -481,11 +484,18 @@ function VariableSection({ cardId, categories, expenses, year, month, onMutate }
                     <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
                       {expense.description ?? 'Sem descrição'}
                     </p>
-                    {cat && (
-                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {cat.name}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {cat && (
+                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {cat.name}
+                        </span>
+                      )}
+                      {expense.expense_date && (
+                        <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                          {expense.expense_date.split('-').reverse().slice(0, 2).join('/')}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <span className="font-mono text-sm font-medium shrink-0" style={{ color: 'var(--negative)' }}>
@@ -559,6 +569,14 @@ function VariableSection({ cardId, categories, expenses, year, month, onMutate }
               </SelectContent>
             </Select>
           </div>
+          <Input
+            type="date"
+            value={expenseDate}
+            onChange={(e) => setExpenseDate(e.target.value)}
+            disabled={isPending}
+            placeholder="Data do gasto (opcional)"
+            style={{ colorScheme: 'dark' }}
+          />
           <div className="flex gap-3">
             <Button
               type="button"

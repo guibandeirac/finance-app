@@ -167,13 +167,14 @@ export function HomeClient({
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3 px-4 pt-4 pb-3 lg:grid-cols-4">
         {[
-          { label: 'Entradas', value: summary?.total_entrada ?? 0, color: 'var(--positive)',  bg: 'var(--positive-bg)' },
-          { label: 'Saídas',   value: summary?.total_saida   ?? 0, color: 'var(--negative)',  bg: 'var(--negative-bg)' },
-          { label: 'Diário',   value: summary?.total_diario  ?? 0, color: 'var(--daily)',     bg: 'var(--daily-bg)'    },
+          { label: 'Entradas', value: summary?.total_entrada ?? 0, color: 'var(--positive)',  bg: 'var(--positive-bg)',  showSign: false },
+          { label: 'Saídas',   value: summary?.total_saida   ?? 0, color: 'var(--negative)',  bg: 'var(--negative-bg)',  showSign: false },
+          { label: 'Diário',   value: summary?.total_diario  ?? 0, color: 'var(--daily)',     bg: 'var(--daily-bg)',     showSign: false },
           {
             label: 'Saldo', value: netBalance,
             color: isNetPositive ? 'var(--positive)' : 'var(--negative)',
             bg:    isNetPositive ? 'var(--positive-bg)' : 'var(--negative-bg)',
+            showSign: true,
           },
         ].map((card) => (
           <div
@@ -185,7 +186,7 @@ export function HomeClient({
               {card.label}
             </span>
             <span className="font-mono text-base font-semibold" style={{ color: card.color }}>
-              R$ {formatMoney(Math.abs(card.value))}
+              {card.showSign && card.value < 0 ? '-' : ''}R$ {formatMoney(Math.abs(card.value))}
             </span>
           </div>
         ))}

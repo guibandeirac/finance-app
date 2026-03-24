@@ -21,7 +21,7 @@ interface DashboardClientProps {
   prevSummary: MonthlySummaryData
   transactions: Transaction[]
   categories: Category[]
-  cardSpending: { category_id: string | null; amount: number }[]
+  cardSpending: { category_id: string | null; amount: number; description: string; item_type: string; expense_date: string | null }[]
 }
 
 function formatMoney(value: number): string {
@@ -43,9 +43,10 @@ interface SummaryCardProps {
   /** If true, higher = better. If false, lower = better. */
   higherIsBetter: boolean
   valueColor?: string
+  showSign?: boolean
 }
 
-function SummaryCard({ label, value, variation, higherIsBetter, valueColor }: SummaryCardProps) {
+function SummaryCard({ label, value, variation, higherIsBetter, valueColor, showSign }: SummaryCardProps) {
   const isPositiveChange = variation !== null
     ? (higherIsBetter ? variation >= 0 : variation <= 0)
     : null
@@ -62,7 +63,7 @@ function SummaryCard({ label, value, variation, higherIsBetter, valueColor }: Su
         className="font-mono text-base font-semibold leading-tight"
         style={{ color: valueColor ?? 'var(--text-primary)' }}
       >
-        R$ {formatMoney(Math.abs(value))}
+        {showSign && value < 0 ? '-' : ''}R$ {formatMoney(Math.abs(value))}
       </span>
       {variation !== null && (
         <div className="flex items-center gap-1">
@@ -180,6 +181,7 @@ export function DashboardClient({
             variation={balanceVar}
             higherIsBetter={true}
             valueColor={isBalancePositive ? 'var(--positive)' : 'var(--negative)'}
+            showSign={true}
           />
         </div>
 

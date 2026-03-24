@@ -64,6 +64,7 @@ export interface VariableExpense {
   amount: number
   description: string | null
   category_id: string | null
+  expense_date: string | null
   category?: { name: string; color: string | null } | null
 }
 
@@ -77,6 +78,7 @@ export interface BillBreakdownItem {
   total_inst: number | null
   reference_month: string | null
   is_active: boolean
+  expense_date: string | null
 }
 
 export interface BillBreakdown {
@@ -102,6 +104,7 @@ export interface CardItemData {
   end_month?: string | null
   // variable
   reference_month?: string | null
+  expense_date?: string | null
 }
 
 // ─── Cards ────────────────────────────────────────────────────────────────────
@@ -268,6 +271,7 @@ export async function updateCardItem(
       ...(itemData.category_id !== undefined && { category_id: itemData.category_id }),
       ...(itemData.start_month !== undefined && { start_month: itemData.start_month }),
       ...(itemData.end_month !== undefined && { end_month: itemData.end_month }),
+      ...(itemData.expense_date !== undefined && { expense_date: itemData.expense_date }),
     })
     .eq('id', id)
     .eq('user_id', user.id)
@@ -343,6 +347,7 @@ export async function createVariableCardItem(data: {
   amount: number
   category_id?: string | null
   reference_month: string   // YYYY-MM-DD
+  expense_date?: string | null  // YYYY-MM-DD, optional
 }): Promise<{ data: CardItemType | null; error: string | null }> {
   const supabase = await createClient()
 
@@ -359,6 +364,7 @@ export async function createVariableCardItem(data: {
       amount: data.amount,
       category_id: data.category_id ?? null,
       reference_month: data.reference_month,
+      expense_date: data.expense_date ?? null,
       is_active: true,
     })
     .select()
@@ -504,7 +510,7 @@ export async function getCardMonthlyTotal(
 export async function getCardCategorySpending(
   year: number,
   month: number
-): Promise<{ data: { category_id: string | null; amount: number }[] | null; error: string | null }> {
+): Promise<{ data: { category_id: string | null; amount: number; description: string; item_type: string; expense_date: string | null }[] | null; error: string | null }> {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -515,7 +521,7 @@ export async function getCardCategorySpending(
   const [fixedRes, fixedOverridesRes, installRes, varRes] = await Promise.all([
     supabase
       .from('credit_card_items')
-      .select('id, category_id, amount')
+      .select('id, category_id, amount, description')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .eq('item_type', 'fixed')
@@ -527,7 +533,7 @@ export async function getCardCategorySpending(
       .eq('reference_month', billMonth),
     supabase
       .from('credit_card_items')
-      .select('category_id, amount')
+      .select('category_id, amount, description')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .eq('item_type', 'installment')
@@ -535,10 +541,11 @@ export async function getCardCategorySpending(
       .gte('end_month', billMonth),
     supabase
       .from('credit_card_items')
-      .select('category_id, amount')
+      .select('category_id, amount, description, expense_date')
       .eq('user_id', user.id)
       .eq('item_type', 'variable')
-      .eq('reference_month', billMonth),
+      .eq('reference_month', billMonth)
+      .order('expense_date', { ascending: true, nullsFirst: false }),
   ])
 
   if (fixedRes.error) return { data: null, error: fixedRes.error.message }
@@ -560,13 +567,28 @@ export async function getCardCategorySpending(
       return {
         category_id: (o?.override_category_id ?? i.category_id) as string | null,
         amount: Number(o?.override_amount ?? i.amount),
+        description: i.description as string,
+        item_type: 'fixed',
+        expense_date: null as string | null,
       }
     })
 
   const items = [
     ...fixedItems,
-    ...(installRes.data ?? []).map((i) => ({ category_id: i.category_id as string | null, amount: Number(i.amount) })),
-    ...(varRes.data ?? []).map((i) => ({ category_id: i.category_id as string | null, amount: Number(i.amount) })),
+    ...(installRes.data ?? []).map((i) => ({
+      category_id: i.category_id as string | null,
+      amount: Number(i.amount),
+      description: i.description as string,
+      item_type: 'installment',
+      expense_date: null as string | null,
+    })),
+    ...(varRes.data ?? []).map((i) => ({
+      category_id: i.category_id as string | null,
+      amount: Number(i.amount),
+      description: i.description as string,
+      item_type: 'variable',
+      expense_date: (i.expense_date ?? null) as string | null,
+    })),
   ]
 
   return { data: items, error: null }
@@ -629,11 +651,12 @@ export async function getCardVariableExpenses(
 
   const { data, error } = await supabase
     .from('credit_card_items')
-    .select('id, amount, description, category_id, category:categories(name, color)')
+    .select('id, amount, description, category_id, expense_date, category:categories(name, color)')
     .eq('card_id', card_id)
     .eq('user_id', user.id)
     .eq('item_type', 'variable')
     .eq('reference_month', referenceMonth)
+    .order('expense_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true })
 
   if (error) return { data: null, error: error.message }
@@ -643,12 +666,14 @@ export async function getCardVariableExpenses(
     amount: number
     description: string | null
     category_id: string | null
+    expense_date: string | null
     category: { name: string; color: string | null }[] | null
   }) => ({
     id: row.id,
     amount: row.amount,
     description: row.description,
     category_id: row.category_id,
+    expense_date: row.expense_date ?? null,
     category: Array.isArray(row.category) ? row.category[0] ?? null : row.category,
   }))
 

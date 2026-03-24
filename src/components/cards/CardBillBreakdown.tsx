@@ -62,12 +62,14 @@ export function CardBillBreakdown({
   const [addDesc, setAddDesc] = useState('')
   const [addAmount, setAddAmount] = useState('')
   const [addCatId, setAddCatId] = useState<string>('')
+  const [addExpenseDate, setAddExpenseDate] = useState<string>('')
 
   // Edit state
   const [editingItem, setEditingItem] = useState<BillBreakdownItem | null>(null)
   const [editDesc, setEditDesc] = useState('')
   const [editAmount, setEditAmount] = useState('')
   const [editCatId, setEditCatId] = useState('')
+  const [editExpenseDate, setEditExpenseDate] = useState<string>('')
 
   function fetchBreakdown() {
     setLoading(true)
@@ -87,6 +89,7 @@ export function CardBillBreakdown({
     setEditDesc(item.description)
     setEditAmount(item.amount.toFixed(2).replace('.', ','))
     setEditCatId(item.category_id ?? '')
+    setEditExpenseDate(item.expense_date ?? '')
   }
 
   const referenceMonth = `${year}-${String(month).padStart(2, '0')}-01`
@@ -110,6 +113,7 @@ export function CardBillBreakdown({
         : await updateCardItem(editingItem.id, {
             amount,
             category_id: editCatId || null,
+            ...(editingItem.item_type === 'variable' && { expense_date: editExpenseDate || null }),
           })
 
       if (result.error) {
@@ -138,6 +142,7 @@ export function CardBillBreakdown({
         amount,
         category_id: addCatId || null,
         reference_month: referenceMonth,
+        expense_date: addExpenseDate || null,
       })
       if (result.error) {
         toast.error(result.error)
@@ -146,6 +151,7 @@ export function CardBillBreakdown({
         setAddDesc('')
         setAddAmount('')
         setAddCatId('')
+        setAddExpenseDate('')
         setShowAddForm(false)
         fetchBreakdown()
         onMutate?.()
@@ -231,6 +237,15 @@ export function CardBillBreakdown({
           </SelectContent>
         </Select>
       </div>
+      {editingItem?.item_type === 'variable' && (
+        <Input
+          type="date"
+          value={editExpenseDate}
+          onChange={(e) => setEditExpenseDate(e.target.value)}
+          disabled={isPending}
+          style={{ colorScheme: 'dark' }}
+        />
+      )}
       <div className="flex gap-2">
         <Button
           type="button"
@@ -334,9 +349,16 @@ export function CardBillBreakdown({
                           style={{ backgroundColor: cat.color }}
                         />
                       )}
-                      <span className="flex-1 min-w-0 truncate text-xs" style={{ color: 'var(--text-primary)' }}>
-                        {item.description}
-                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span className="block truncate text-xs" style={{ color: 'var(--text-primary)' }}>
+                          {item.description}
+                        </span>
+                        {item.expense_date && (
+                          <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
+                            {item.expense_date.split('-').reverse().slice(0, 2).join('/')}
+                          </span>
+                        )}
+                      </div>
                       <span className="font-mono text-xs shrink-0" style={{ color: 'var(--negative)' }}>
                         {fmt(Number(item.amount))}
                       </span>
@@ -418,6 +440,13 @@ export function CardBillBreakdown({
                 </SelectContent>
               </Select>
             </div>
+            <Input
+              type="date"
+              value={addExpenseDate}
+              onChange={(e) => setAddExpenseDate(e.target.value)}
+              disabled={isPending}
+              style={{ colorScheme: 'dark' }}
+            />
             <div className="flex gap-2">
               <Button
                 type="button"

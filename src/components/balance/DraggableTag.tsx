@@ -28,7 +28,7 @@ export function DraggableTag({ transaction }: DraggableTagProps) {
   })
 
   const colors = TYPE_COLORS[transaction.type] ?? TYPE_COLORS.saida
-  const prefix = transaction.type === 'saida' ? '−' : '+'
+  const prefix = transaction.type === 'entrada' ? '+' : '−'
 
   return (
     <span
@@ -54,7 +54,7 @@ export function DraggableTag({ transaction }: DraggableTagProps) {
 /** Snapshot rendered inside DragOverlay while dragging */
 export function TagOverlay({ transaction }: { transaction: Transaction }) {
   const colors = TYPE_COLORS[transaction.type] ?? TYPE_COLORS.saida
-  const prefix = transaction.type === 'saida' ? '−' : '+'
+  const prefix = transaction.type === 'entrada' ? '+' : '−'
 
   return (
     <span

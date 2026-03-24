@@ -142,7 +142,7 @@ export function TransactionCard({ transaction, categories, cards, onMutate }: Tr
           <div className="flex shrink-0 items-center gap-2">
             <div className="flex flex-col items-end gap-1">
               <span className="font-mono text-sm font-semibold" style={{ color: amountColor }}>
-                {transaction.type === 'saida' ? '−' : '+'}R$ {formatAmount(transaction.amount)}
+                {transaction.type === 'entrada' ? '+' : '−'}R$ {formatAmount(transaction.amount)}
               </span>
               <div className="flex gap-1">
                 {transaction.recurring_id && (
